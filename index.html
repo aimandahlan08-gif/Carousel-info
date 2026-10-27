@@ -39,6 +39,18 @@
           <button class="btn ghost" id="sampleBtn">Try a sample</button>
         </div>
         <p class="status" id="status" role="status"></p>
+        <details class="paste ai-settings" id="aiSettings">
+          <summary>✨ AI mode <span class="badge" id="aiBadge">off</span></summary>
+          <p class="hint">Paste your Claude API key to have AI read and understand the document, so the slides explain it instead of copying random sentences. Uses Claude Haiku (about US$0.002 per paper). The key stays in this browser only.</p>
+          <label class="field">Claude API key
+            <input type="password" id="aiKeyInput" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+          </label>
+          <div class="row">
+            <button class="btn small" id="aiSaveBtn">Save key</button>
+            <button class="btn ghost small" id="aiClearBtn">Remove</button>
+          </div>
+          <p class="hint">Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Without a key, the free built-in analyzer is used.</p>
+        </details>
       </section>
 
       <section class="panel">
@@ -185,6 +197,7 @@
   <script src="vendor/jszip.min.js"></script>
   <script src="js/sample.js"></script>
   <script src="js/analyze.js"></script>
+  <script src="js/ai.js"></script>
   <script src="js/blocks.js"></script>
   <script src="js/render.js"></script>
   <script src="js/music.js"></script>

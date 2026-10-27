@@ -102,6 +102,25 @@
     $('#zipBtn').addEventListener('click', downloadZip);
     $('#secInput').addEventListener('input', e => { state.secondsPerSlide = +e.target.value; $('#secOut').value = e.target.value; updateTrackInfo(); });
     $('#videoBtn').addEventListener('click', exportVideo);
+    // AI mode settings
+    const keyInput = $('#aiKeyInput');
+    keyInput.value = AI.getKey();
+    updateAiBadge();
+    $('#aiSaveBtn').addEventListener('click', () => {
+      const k = keyInput.value.trim();
+      if (!k) return setStatus('Paste your API key first.', true);
+      AI.setKey(k);
+      updateAiBadge();
+      flash($('#aiSaveBtn'), 'Saved ✓');
+      setStatus('AI mode on. Upload a document to try it.');
+    });
+    $('#aiClearBtn').addEventListener('click', () => {
+      AI.setKey('');
+      keyInput.value = '';
+      updateAiBadge();
+      setStatus('AI mode off. Using the free built-in analyzer.');
+    });
+
     $('#copyCaptionBtn').addEventListener('click', async () => {
       try { await navigator.clipboard.writeText($('#captionOutput').value); flash($('#copyCaptionBtn'), 'Copied!'); }
       catch { $('#captionOutput').select(); document.execCommand('copy'); flash($('#copyCaptionBtn'), 'Copied!'); }
@@ -123,15 +142,32 @@
   }
 
   async function generate(text, sourceName) {
+    const buttons = [$('#generateBtn'), $('#sampleBtn')];
     try {
-      const story = Analyzer.analyzeDocument(text);
+      let story = Analyzer.analyzeDocument(text);
+      let note = '';
+      const key = AI.getKey();
+      if (key) {
+        buttons.forEach(b => (b.disabled = true));
+        setStatus('✨ AI is reading the document… (usually 5–15 seconds)');
+        try {
+          const { result, usage } = await AI.analyze(text, key, { maxSlides: state.maxSlides });
+          story = AI.toStory(result, story);
+          note = usage ? ` · ✨ AI (${(usage.input_tokens + usage.output_tokens).toLocaleString()} tokens)` : ' · ✨ AI';
+        } catch (err) {
+          console.error(err);
+          note = ` · ⚠️ ${err.message} Used the built-in analyzer instead.`;
+        } finally {
+          buttons.forEach(b => (b.disabled = false));
+        }
+      }
       state.story = story;
       state.sourceName = sourceName;
       state.blocks = Blocks.buildBlocks(story, { maxSlides: state.maxSlides });
       state.slide = 0;
       setMood(story.mood.primary);
       $('#moodSelect').value = state.mood;
-      setStatus(`✓ ${story.wordCount.toLocaleString()} words · ${story.stats.length} numbers · ${story.sections.length} sections found in “${sourceName}”.`);
+      setStatus(`✓ ${story.wordCount.toLocaleString()} words · ${story.stats.length} numbers · ${story.sections.length} sections from “${sourceName}”${note}`, note.includes('⚠️'));
       await fontsReady();
       $('#emptyState').hidden = true;
       $('#editorPanel').hidden = false;
@@ -457,6 +493,13 @@
     $$('.tabpanel').forEach(p => (p.hidden = !state.story || p.dataset.panel !== name));
   }
   function currentTab() { const b = $('.tabs button[aria-selected=true]'); return b && b.dataset.tab; }
+
+  function updateAiBadge() {
+    const on = !!AI.getKey();
+    const badge = $('#aiBadge');
+    badge.textContent = on ? 'on' : 'off';
+    badge.classList.toggle('on', on);
+  }
 
   function setStatus(msg, isError) {
     const el = $('#status');

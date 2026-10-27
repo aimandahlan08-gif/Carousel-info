@@ -1,6 +1,6 @@
 # Carousel Info
 
-Turn any document into an **infographic**, slice it into **Instagram-style carousel posts**, and pair it with **music that fits the mood**. Everything runs in the browser. There is no server, no API key, and your document never leaves your machine.
+Turn any document into an **infographic**, slice it into **Instagram-style carousel posts**, and pair it with **music that fits the mood**. Everything runs in the browser. By default there is no server, no API key, and your document never leaves your machine.
 
 ## How it works
 
@@ -10,6 +10,7 @@ Turn any document into an **infographic**, slice it into **Instagram-style carou
    - the sections (from headings) and the key points in each,
    - the big numbers (percentages, money, multipliers, durations),
    - a quotable line, keywords, and the document's **mood** (inspiring, professional, tech, calm, energetic, serious, or playful).
+   - **Optional AI mode** (`js/ai.js`): paste your own Claude API key under *✨ AI mode* and the document text is sent to Claude Haiku, which reads it and writes the title, key messages, meaningful numbers, one slide per main idea, and a takeaway in plain language. The reference list is skipped and long documents are capped at ~15k tokens, so a typical paper costs about US$0.002. The key is stored only in your browser. If the request fails, the built-in analyzer is used instead.
 3. **Infographic** (`js/render.js`): everything is laid out as one tall 1080px-wide image. It has a cover, *At a glance*, stat cards with progress bars, numbered sections, a quote, and a key-takeaway call to action.
 4. **Carousel**: the same content blocks become one slide each, in 4:5 portrait (1080×1350) or 1:1 square (1080×1080). Each slide has a page counter, progress dots, and a "Swipe →" hint. The preview looks and swipes like a real Instagram post.
 5. **Music** (`js/music.js`):

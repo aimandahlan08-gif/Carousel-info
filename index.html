@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carousel Info</title>
+  <meta name="description" content="Turn any document into an infographic and an Instagram-style carousel with a matching soundtrack.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">▦</span>
+      <div>
+        <h1>Carousel Info</h1>
+        <p>Document → infographic → carousel posts, with a soundtrack.</p>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <section class="panel">
+        <h2><span class="step">1</span> Document</h2>
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md,.markdown,.html,.htm" hidden>
+          <strong>Drop a document here</strong>
+          <span>or click to browse · PDF, DOCX, TXT, MD, HTML</span>
+        </label>
+        <details class="paste">
+          <summary>…or paste text</summary>
+          <textarea id="pasteInput" rows="7" placeholder="Paste an article, report, or notes here"></textarea>
+        </details>
+        <div class="row">
+          <button class="btn primary" id="generateBtn">Generate</button>
+          <button class="btn ghost" id="sampleBtn">Try a sample</button>
+        </div>
+        <p class="status" id="status" role="status"></p>
+      </section>
+
+      <section class="panel">
+        <h2><span class="step">2</span> Design</h2>
+        <label class="field">Theme
+          <select id="themeSelect"></select>
+        </label>
+        <div class="field">Post format
+          <div class="segmented" role="radiogroup">
+            <label><input type="radio" name="format" value="portrait" checked> Portrait 4:5</label>
+            <label><input type="radio" name="format" value="square"> Square 1:1</label>
+          </div>
+        </div>
+        <label class="field">Instagram handle
+          <input type="text" id="handleInput" placeholder="@yourbrand">
+        </label>
+        <label class="field">Max slides <output id="maxSlidesOut">10</output>
+          <input type="range" id="maxSlidesInput" min="4" max="20" value="10">
+        </label>
+      </section>
+
+      <section class="panel" id="editorPanel" hidden>
+        <h2><span class="step">3</span> Edit content</h2>
+        <p class="hint">Each card is one carousel slide and one infographic section. For numbers use <code>value | label</code>.</p>
+        <div id="blockEditor"></div>
+        <button class="btn ghost small" id="addBlockBtn">+ Add slide</button>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <nav class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="carousel">Carousel</button>
+        <button role="tab" aria-selected="false" data-tab="infographic">Infographic</button>
+        <button role="tab" aria-selected="false" data-tab="music">Music</button>
+        <button role="tab" aria-selected="false" data-tab="export">Caption &amp; export</button>
+      </nav>
+
+      <div class="empty" id="emptyState">
+        <div class="empty-art" aria-hidden="true"><span></span><span></span><span></span></div>
+        <h3>Upload a document to get started</h3>
+        <p>We pull out the headline, key points, big numbers and sections, lay them out as an infographic, slice it into swipeable slides, and pick music that fits the mood.</p>
+      </div>
+
+      <section class="tabpanel" data-panel="carousel" hidden>
+        <div class="carousel-stage">
+          <div class="phone">
+            <div class="post-head">
+              <div class="avatar" id="postAvatar"></div>
+              <div class="post-meta">
+                <strong id="postHandle">yourbrand</strong>
+                <span class="music-chip" id="postMusic">♫ Original audio</span>
+              </div>
+              <span class="dots-menu">•••</span>
+            </div>
+            <div class="viewport" id="viewport">
+              <div class="track" id="track"></div>
+              <button class="nav prev" id="prevBtn" aria-label="Previous slide">‹</button>
+              <button class="nav next" id="nextBtn" aria-label="Next slide">›</button>
+            </div>
+            <div class="post-actions">
+              <span>♡</span><span>💬</span><span>➤</span>
+              <div class="ig-dots" id="igDots"></div>
+              <span class="save">⌑</span>
+            </div>
+            <p class="post-caption" id="postCaption"></p>
+          </div>
+          <div class="side-tools">
+            <button class="btn" id="playSoundBtn">▶ Play with soundtrack</button>
+            <button class="btn ghost" id="downloadSlideBtn">Download this slide</button>
+            <div class="thumbs" id="thumbs"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tabpanel" data-panel="infographic" hidden>
+        <div class="toolbar">
+          <p>The full infographic. The carousel uses the same sections, one per slide.</p>
+          <button class="btn" id="downloadInfographicBtn">Download PNG</button>
+        </div>
+        <div class="infographic-wrap"><canvas id="infographicCanvas"></canvas></div>
+      </section>
+
+      <section class="tabpanel" data-panel="music" hidden>
+        <div class="music-grid">
+          <div class="card">
+            <h3>Detected mood</h3>
+            <div class="mood-current" id="moodCurrent"></div>
+            <div id="moodBars" class="mood-bars"></div>
+            <label class="field">Override mood
+              <select id="moodSelect"></select>
+            </label>
+          </div>
+          <div class="card">
+            <h3>Original soundtrack <span class="badge">royalty-free</span></h3>
+            <p class="hint">Generated in your browser to match the mood. Use it in the exported video, or download it.</p>
+            <div class="row">
+              <button class="btn primary" id="previewTrackBtn">▶ Preview</button>
+              <button class="btn ghost" id="downloadTrackBtn">Download WAV</button>
+            </div>
+            <p class="hint" id="trackInfo"></p>
+            <hr>
+            <h3>Use your own audio</h3>
+            <p class="hint">Optional: this replaces the generated soundtrack in the video export.</p>
+            <input type="file" id="audioInput" accept="audio/*">
+            <p class="hint" id="audioInfo"></p>
+          </div>
+          <div class="card wide">
+            <h3>Suggested songs for Instagram</h3>
+            <p class="hint">Pick one in Instagram's <em>Add music</em> step when you post the carousel. Selecting one adds it to the caption and post preview.</p>
+            <ol class="songs" id="songList"></ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="tabpanel" data-panel="export" hidden>
+        <div class="music-grid">
+          <div class="card">
+            <h3>Download</h3>
+            <div class="stack">
+              <button class="btn primary" id="zipBtn">All slides (.zip of PNGs)</button>
+              <button class="btn" id="infographicBtn2">Infographic (PNG)</button>
+              <label class="field">Seconds per slide <output id="secOut">3</output>
+                <input type="range" id="secInput" min="2" max="6" step="0.5" value="3">
+              </label>
+              <button class="btn" id="videoBtn">Carousel video with music</button>
+              <progress id="videoProgress" max="1" value="0" hidden></progress>
+              <p class="hint" id="videoInfo">The video is a slideshow of every slide with the soundtrack (or your audio), ready for Reels or Stories.</p>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Caption</h3>
+            <textarea id="captionOutput" rows="14"></textarea>
+            <button class="btn" id="copyCaptionBtn">Copy caption</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <canvas id="workCanvas" hidden></canvas>
+
+  <script src="vendor/pdf.min.js"></script>
+  <script src="vendor/mammoth.browser.min.js"></script>
+  <script src="vendor/jszip.min.js"></script>
+  <script src="js/sample.js"></script>
+  <script src="js/analyze.js"></script>
+  <script src="js/blocks.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/music.js"></script>
+  <script src="js/extract.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

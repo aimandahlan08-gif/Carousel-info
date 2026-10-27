@@ -36,9 +36,9 @@
 
     if (story.quote) blocks.push(block('quote', '', [story.quote]));
 
-    const takeaway = story.sections.length
+    const takeaway = story.takeaway || (story.sections.length
       ? story.sections[story.sections.length - 1].points[0]
-      : story.keyPoints[story.keyPoints.length - 1];
+      : story.keyPoints[story.keyPoints.length - 1]);
     blocks.push(block('cta', 'Key takeaway', [takeaway || story.subtitle, 'Save this post & share it with someone who needs it']));
 
     // Respect the slide budget: keep cover + cta, trim from the middle (latest sections first).

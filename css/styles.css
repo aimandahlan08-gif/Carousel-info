@@ -70,7 +70,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 .dropzone.drag, .dropzone:hover { border-color: var(--accent); }
 .paste { margin: 12px 0; }
 .paste summary { cursor: pointer; color: var(--muted); font-size: 14px; }
-textarea, input[type=text], select { width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+textarea, input[type=text], input[type=password], select { width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 textarea { resize: vertical; margin-top: 8px; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; margin-bottom: 14px; }
 .field output { color: var(--accent); }
@@ -171,3 +171,9 @@ input[type=range] { accent-color: var(--accent); }
 .song a:hover { color: var(--text); background: var(--surface); }
 progress { width: 100%; accent-color: var(--accent); }
 #captionOutput { font-size: 13px; margin-bottom: 10px; }
+
+/* ---------- AI mode ---------- */
+.ai-settings { border-top: 1px solid var(--border); padding-top: 12px; }
+.ai-settings .field { margin-top: 8px; }
+.ai-settings a { color: var(--accent); }
+.badge.on { background: #16a34a; color: #fff; }

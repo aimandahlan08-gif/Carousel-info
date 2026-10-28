@@ -136,6 +136,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
 .stage { overflow: auto; min-height: 0; background-color: var(--bg); background-image: radial-gradient(var(--dot) 1.1px, transparent 1.2px); background-size: 18px 18px; padding: 22px; }
 [hidden] { display: none !important; }
 .view[hidden] { display: none !important; }
+.ptype { margin: 0 0 14px; } .ptype .seg { grid-auto-flow: column; justify-content: start; gap: 18px; font-size: 14px; } .ptype .hint { margin-top: 6px; }
 .car { display: grid; grid-template-columns: minmax(0, 430px) minmax(0, 1fr); gap: 22px; align-items: start; }
 .big { width: min(430px, 100%); aspect-ratio: 4 / 5; max-width: 100%; display: block; box-shadow: 0 18px 40px -18px rgba(10, 20, 15, .45), 0 2px 6px rgba(10,20,15,.12); border-radius: 4px; background: #fff; }
 .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 14px; align-content: start; }
@@ -402,6 +403,7 @@ details.src p { margin: 6px 0 0; }
         <div class="view" id="vCarousel">
           <div class="aibar" id="aiBar" hidden><strong><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l2.2 7.3 7.3 2.2-7.3 2.2L12 21.5l-2.2-7.3L2.5 12l7.3-2.2z"/></svg>Ask Claude</strong><button class="btn sm" type="button" id="aiPolish">Polish all slides</button><button class="btn sm" type="button" id="aiCaption">Write the post caption</button><span class="hint">Uses your Claude account. Numbers are checked against the paper.</span></div>
           <div class="ai-out" id="aiBarOut" hidden></div>
+          <div class="ptype"><div class="seg" role="radiogroup" aria-label="Post type"><label><input type="radio" name="ptype" value="summary" checked> Paper summary</label><label><input type="radio" name="ptype" value="revision"> Revision notes (medical)</label></div><p class="hint" id="ptHint"></p></div>
           <div class="car">
             <canvas class="big" id="bigSlide" width="1080" height="1350" aria-label="Selected slide preview"></canvas>
             <div class="strip" id="strip"></div>
@@ -763,7 +765,8 @@ const P2P = (() => {
       const m = lines[i].text.match(/^key\s?words?\s*[:—–-]?\s*(.*)$/i);
       if (m) {
         let s = m[1];
-        if (!/\.\s*$/.test(s) && lines[i + 1] && lines[i + 1].text.length < 90 && !classify(lines[i + 1].text)) s += ' ' + lines[i + 1].text;
+        const nx = lines[i + 1];
+        if (!/\.\s*$/.test(s) && nx && nx.text.length < 90 && !classify(nx.text) && !nx.bold && nx.size <= lines[i].size * 1.05) s += ' ' + nx.text;
         keywords = s.split(/\s*[,;·•|]\s*/).map(k => k.replace(/\.$/, '').trim()).filter(k => k && k.length < 50).slice(0, 8);
         break;
       }
@@ -803,7 +806,7 @@ const P2P = (() => {
       }
       if (cur === 'skip') continue;
       if (/^key\s?words?\s*[:—–-]/i.test(t)) { skipKw = !/\.$/.test(t); continue; }
-      if (skipKw) { skipKw = false; if (t.length < 90 && !/\.\s/.test(t)) continue; }
+      if (skipKw) { skipKw = false; if (t.length < 90 && !/\.\s/.test(t) && !l.bold && l.size <= body * 1.05) continue; }
       // inline heading such as "Introduction: Ear, nose and throat emergencies are..."
       const inl = t.match(/^([A-Za-z][A-Za-z &]{2,40}?)\s*[:.—–]\s+(\S.{15,})$/);
       if (inl) {
@@ -1884,6 +1887,101 @@ const P2P = (() => {
     return { eyebrow, subtitle, stats: statsOut, cards, refs: st.refs || [] };
   }
 
+  // ---- revision notes: a high-yield topic carousel for medical students ----
+  // clinical sections in teaching order; head = heading words, cue = words that mark a sentence as belonging here
+  const CLIN = [
+    { key: 'def', label: 'Definition', head: /^(definition|overview|introduction|what is|background|epidemiolog)/, cue: /\b(is (a|an|the) (common |serious |acute |chronic )?\w*\s?(inflammation|infection|condition|disease|disorder|emergency)|is defined as|refers to|lifetime risk|incidence|prevalence|commonest|most common)\b/i, tone: 'light' },
+    { key: 'aet', label: 'Aetiology', head: /aetiolog|etiolog|^causes?\b|microbiolog|pathogens?|organisms?/, cue: /\b(caused by|is due to|bacteri\w*|virus|viral|organisms?|most often caused|commonest cause|causes include)\b/i, tone: 'light' },
+    { key: 'risk', label: 'Risk factors', head: /risk factor|predispos/, cue: /\b(risk factors?|increases? (the )?risk|is the main risk|more common in|predispos)\b/i, tone: 'light' },
+    { key: 'path', label: 'Pathophysiology', head: /pathophysiolog|pathogenesis|mechanism/, cue: /\b(leads? to|results? in|impairs?|build-up|invade|ischaemi)/i, tone: 'outline', flow: true },
+    { key: 'hx', label: 'History', head: /^(history|symptoms?|clinical (features?|presentation)|presentation)/, cue: /\b(present(s)? with|presentation|symptoms?|anorexia|nausea|vomiting|otalgia|cough|headache|fever)\b/i, tone: 'light' },
+    { key: 'ex', label: 'Examination', head: /^(examination|clinical signs?|signs?|physical)/, cue: /\b(on examination|examination (shows|reveals|finds)|tenderness|guarding|\w+'s sign|sign is|bulging|rash|murmur|palpable)\b/i, tone: 'light' },
+    { key: 'ix', label: 'Investigations', head: /^(investigat|diagnosis$|diagnostic|work-?up|tests?$|imaging)/, cue: /\b(blood tests?|white cell|C-reactive|CRP|ultrasound|CT\b|MRI|X-ray|culture|biopsy|pregnancy test|scor(e|ing system)|audiometry|tympanometry|ECG)\b/i, tone: 'light' },
+    { key: 'mx', label: 'Management', head: /manag|treat|therap/, cue: /\b(treat(ed|ment)?|managed?|management|antibiotics?|analgesia|surgery|surgical|appendicectomy|resuscitat\w*|admit|nil by mouth|fluids?)\b/i, tone: 'outline' },
+    { key: 'cx', label: 'Complications', head: /complicat/, cue: /\b(complications?|perforat\w*|abscess|peritonitis|meningitis)\b/i, tone: 'light' },
+    { key: 'red', label: 'Red flags', head: /red flag|warning sign|when to refer|urgent/, cue: /\b(urgent(ly)?|immediate(ly)?|life-threatening|refer(ral|red)? (urgently|immediately)|needs? urgent|emergency|sepsis)\b/i, tone: 'warn' },
+    { key: 'ddx', label: 'Differentials', head: /differential/, cue: /\b(differential|must be excluded|exclude|mimics?)\b/i, tone: 'light' },
+    { key: 'prev', label: 'Prevention', head: /prevent|vaccin|screening/, cue: /\b(prevent\w*|vaccin\w*|reduces? the risk)\b/i, tone: 'light' },
+    { key: 'pearl', label: 'High-yield pearls', head: /key points?|pearls?|summary|take[- ]home|high[- ]yield|conclusions?/, cue: null, tone: 'dark' },
+  ];
+  // match headings in an order where specific words win ("differential diagnosis" before "diagnosis")
+  const HEAD_ORDER = ['ddx', 'red', 'pearl', 'cx', 'prev', 'mx', 'ix', 'ex', 'hx', 'path', 'risk', 'aet', 'def'];
+  function clinHead(h) { const n = normHeading(h); for (const k of HEAD_ORDER) { const c = CLIN.find(x => x.key === k); if (c.head.test(n)) return k; } return null; }
+  function clinCue(text) { for (const c of CLIN) if (c.cue && c.cue.test(text)) return c.key; return null; }
+  const SPECIALTY = [[/\b(ear|otitis|tympanic|nose|nasal|epistaxis|throat|tonsil|laryn|sinus|ENT)\b/i, 'ENT'], [/\b(heart|cardiac|myocard|coronary|arrhythm|atrial)\b/i, 'Cardiology'], [/\b(lung|asthma|pneumon|bronch|COPD|respirat)\b/i, 'Respiratory'], [/\b(kidney|renal|nephr|urinary)\b/i, 'Renal'], [/\b(diabet|thyroid|adrenal|insulin|endocrin)\b/i, 'Endocrine'], [/\b(pregnan|obstetric|gynae|ovar|uter)\w*/i, 'O&G'], [/\b(stroke|seizure|epilep|neurolog|migraine|dementia)\b/i, 'Neurology'], [/\b(depress|anxiety|psychos|schizo|bipolar|psychiatr)\w*/i, 'Psychiatry'], [/\b(fracture|bone|joint|orthop)\w*/i, 'Orthopaedics'], [/\b(appendic|bowel|abdom|hernia|cholecyst|surgical)\w*/i, 'Surgery'], [/\b(liver|hepat|gastr|coeli|crohn|colitis)\w*/i, 'Gastroenterology'], [/\b(skin|rash|eczema|psoria|dermat)\w*/i, 'Dermatology'], [/\b(child|infant|neonat|paediatr)\w*/i, 'Paediatrics']];
+  // "Rebound tenderness and guarding suggest ..." -> bold the subject so the bullet can be skimmed
+  function boldSubject(t, kws) {
+    if (/\*/.test(t)) return t;
+    const m2 = t.match(/^(.{3,46}?)\s+(is|are|was|were|include|includes|causes?|suggests?|show|shows|needs?|must|may|can|should|leads?|usually|often|follows?)\b/);
+    const subj = m2 && m2[1];
+    const weak = /^(the|a|an|this|these|those|it|they|there|other|others|rare|some|many|most|patients?|examination|management|treatment|initial|always|signs?)\b/i;
+    if (subj && wc(subj) <= 6 && !weak.test(subj) && !/\b(and|or|of|with|the|a|in|to)$/i.test(subj) && !/\b(impairs?|invades?|leads?|causes?|results?)\b/i.test(subj)) return `**${subj}**${t.slice(subj.length)}`;
+    return boldKey(t, kws);
+  }
+  function buildRevision(m) {
+    const kws = (m.keywords || []).slice(0, 6), st = buildStory(m);
+    const topic = String(m.title || 'This topic').split(/\s*[:—–]\s+|\s+-\s+/)[0].trim();
+    const allText = [...(m.parts || []).map(p => p.text), ...Object.values(m.sections).map(x => x.text)].join(' ');
+    const abbr = (allText.match(new RegExp(`${topic.split(/\s+/).slice(-1)[0]}[^()]{0,40}\\(([A-Z]{2,6})\\)`)) || [])[1] || '';
+    const spec = (SPECIALTY.find(([re]) => re.test(m.title + ' ' + kws.join(' '))) || [null, 'Clinical'])[1];
+    const parts = (m.parts || []).filter(p => !/^(abstract|references?|keywords?|acknowledg)/i.test(p.heading));
+    const buckets = {}; CLIN.forEach(c => { buckets[c.key] = { from: null, items: [] }; });
+    const add = (k, text, where, page, byHead) => { const b = buckets[k]; if (b.items.some(x => x.text === text)) return; if (byHead && !b.from) b.from = { heading: where, page }; b.items.push({ text, where, page, byHead }); };
+    const headed = new Set();
+    parts.forEach(p => { const k = clinHead(p.heading); if (k) { headed.add(k); splitSentences(p.text).filter(x => wc(x) >= 4).forEach(x => add(k, x, p.heading, p.page, true)); } });
+    const unheaded = [...parts.filter(p => !clinHead(p.heading)), ...((m.sections.abstract && !parts.length) ? [{ heading: 'Abstract', text: m.sections.abstract.text }] : [])];
+    const looseSents = [...unheaded.flatMap(p => splitSentences(p.text).map(x => ({ x, p }))), ...(headed.size < 3 ? Object.values(m.sections).flatMap(sec => splitSentences(sec.text).map(x => ({ x, p: { heading: LABELS[sec.key] || sec.heading } }))) : [])];
+    looseSents.forEach(({ x, p }) => { if (wc(x) < 5) return; const k = clinCue(x); if (k && !headed.has(k)) add(k, x, p.heading, p.page, false); });
+    // red flags can also come from the management and complications sections
+    if (!headed.has('red')) ['mx', 'cx', 'ix', 'ex', 'hx'].forEach(k => buckets[k].items.forEach(it => { if (CLIN.find(c => c.key === 'red').cue.test(it.text) && buckets.red.items.length < 4) add('red', it.text, it.where, it.page, false); }));
+    if (!buckets.pearl.items.length) (st.items || []).forEach(it => add('pearl', it.text, 'Summary', null, false));
+    const S2 = t => shorten(t, 16).replace(/\s*…$/, '');
+    const bullets = (k, n = 4) => buckets[k].items.slice(0, n).map(it => boldSubject(S2(it.text), kws));
+    const slides = [];
+    const mk = (label, cards, srcItems, role) => slides.push({ id: id('s'), rev: true, role: role || 'rev', type: 'sheet', label, heading: label, cards, srcs: (srcItems || []).slice(0, 2).map(it => ({ text: it.text, where: [it.where, it.page ? 'page ' + it.page : ''].filter(Boolean).join(', ') })) });
+    const many = (m.topics || []).length >= 3 && headed.size < 3;
+    if (many) {
+      // a review of several conditions: overview, one slide per condition ("recognise" and "manage"), red flags, pearls
+      const URG = /\b(urgent(ly)?|immediately|life-threatening|true emergency|must be (removed|referred|seen)|without delay|airway compromise)\b/i;
+      const ov = splitSentences(sentencesUpTo(st.question, 40)).filter(x => wc(x) >= 5);
+      if (ov.length) mk('Overview', [{ tone: 'light', title: '', blocks: [{ k: 'ul', items: ov.slice(0, 3).map(x => boldSubject(S2(x), kws)) }] }], ov.map(t => ({ text: t, where: 'Introduction' })), 'rev-def');
+      const allRed = [];
+      (m.topics || []).slice(0, 8).forEach(tp => {
+        const ss = (tp.ranked || []).map(x => x.text);
+        const rec = ss.filter(x => /\b(present|symptom|sign|tenderness|fever|pain|stridor|drool|bleed|defined as|is a|are common)\w*/i.test(x)).slice(0, 3);
+        const man = (tp.steps || []).length ? null : ss.filter(x => CLIN.find(c => c.key === 'mx').cue.test(x) && !rec.includes(x)).slice(0, 3);
+        const red = ss.filter(x => URG.test(x) && !rec.includes(x) && !(man || []).includes(x)).slice(0, 1);
+        red.forEach(x => allRed.push({ text: x, where: tp.heading, page: tp.page }));
+        const cards = [{ tone: 'light', title: 'Recognise', blocks: [{ k: 'ul', items: (rec.length ? rec : ss.slice(0, 2)).map(x => boldSubject(S2(x), kws)) }] }];
+        if ((tp.steps || []).length) cards.push({ tone: 'outline', title: 'Manage', blocks: [{ k: 'flow', vertical: true, steps: tp.steps.slice(0, 5).map((x, i, a) => ({ title: x, text: '', tone: i === a.length - 1 ? 'accent' : '' })) }] });
+        else if (man && man.length) cards.push({ tone: 'outline', title: 'Manage', blocks: [{ k: 'ul', items: man.map(x => boldSubject(S2(x), kws)) }] });
+        if (red.length) cards.push({ tone: 'warn', title: 'Red flag', blocks: [{ k: 'p', text: boldSubject(S2(red[0]), kws) }] });
+        mk(tp.heading.replace(/^[^:]+:\s*/, x => x.length < 22 ? '' : x) || tp.heading, cards, ss.slice(0, 1).map(t => ({ text: t, where: tp.heading, page: tp.page })));
+      });
+      if (allRed.length >= 2) mk('Red flags', [{ tone: 'warn', title: '', blocks: [{ k: 'ul', items: allRed.slice(0, 5).map(x => boldSubject(S2(x.text), kws)) }] }], allRed, 'rev-red');
+      if ((st.items || []).length) mk('High-yield pearls', [{ tone: 'dark', title: '', blocks: [{ k: 'ul', items: st.items.slice(0, 4).map(x => boldSubject(S2(x.text), kws)) }] }], st.items.map(x => ({ text: x.text, where: 'Key points' })), 'rev-pearl');
+    } else {
+      const has = k => buckets[k].items.length > 0, words = k => buckets[k].items.slice(0, 4).reduce((a, it) => a + wc(S2(it.text)), 0);
+      const card = k => { const c = CLIN.find(x => x.key === k); return { tone: c.tone, title: '', blocks: [c.flow ? { k: 'flow', vertical: true, steps: buckets[k].items.slice(0, 4).map((it, i, a) => ({ title: '', text: boldSubject(S2(it.text), kws), tone: i === a.length - 1 ? 'accent' : '' })) } : { k: 'ul', items: bullets(k) }] }; };
+      const PAIRS = { aet: 'risk', hx: 'ex', ddx: 'prev' };
+      const done = new Set();
+      for (const c of CLIN) {
+        if (done.has(c.key) || !has(c.key)) continue;
+        const partner = PAIRS[c.key];
+        if (partner && has(partner) && words(c.key) + words(partner) <= 64) {
+          const a = card(c.key), b = card(partner); a.title = c.label; b.title = CLIN.find(x => x.key === partner).label;
+          mk(c.key === 'hx' ? 'Clinical features' : `${c.label} and ${CLIN.find(x => x.key === partner).label.toLowerCase()}`, [a, b], [...buckets[c.key].items, ...buckets[partner].items], 'rev-' + c.key);
+          done.add(c.key); done.add(partner); continue;
+        }
+        mk(c.label, [card(c.key)], buckets[c.key].items, 'rev-' + c.key); done.add(c.key);
+      }
+    }
+    const contents = slides.map(x => x.label);
+    const cover = { id: id('s'), rev: true, role: 'hook', type: 'hook', label: 'Revision notes', heading: topic, hooks: [topic, `${topic}: high-yield revision`, `${topic} in ${slides.length} slides`], hookIndex: 0, body: abbr ? `${abbr} · high-yield revision` : 'High-yield revision', eyebrow: `${spec} · Medical student revision`, contents };
+    const cite = { id: id('s'), rev: true, role: 'cite', type: 'cite', label: 'Source', heading: 'Revise from the source', body: 'Revision aid for medical students. Not a substitute for local clinical guidelines. Save this for exam week and share it with your study group.' };
+    return [cover, ...slides, cite];
+  }
+
   function buildReviewPoster(m) {
     const join = (arr, n, per) => arr.slice(0, n).sort((a, b) => a.order - b.order).map(x => shorten(x.text, per)).join(' ');
     const intro = pool(m, ['abstract', 'introduction'], { decay: 0.1 });
@@ -2091,7 +2189,7 @@ const P2P = (() => {
     };
   }
 
-  return { buildSheet, boldKey, buildTalk, factCheck, studyContext, chartFor, numTokens, toQuestion, objectivesIn, OUTLINES, talkSeconds, speak, buildStory, buildBillboard, detectPrisma, _orderPage: orderPage, extractLines, buildModel, buildSlides, buildPoster, cheatFrom, hookOptions, ctaFor, AUD, topicNoun, findStats, shorten, cleanSentence, wc, shortCite, LABELS, ORDER, STAT_RE, splitSentences };
+  return { buildRevision, clinHead, clinCue, buildSheet, boldKey, buildTalk, factCheck, studyContext, chartFor, numTokens, toQuestion, objectivesIn, OUTLINES, talkSeconds, speak, buildStory, buildBillboard, detectPrisma, _orderPage: orderPage, extractLines, buildModel, buildSlides, buildPoster, cheatFrom, hookOptions, ctaFor, AUD, topicNoun, findStats, shorten, cleanSentence, wc, shortCite, LABELS, ORDER, STAT_RE, splitSentences };
 })();
 if (typeof module !== 'undefined') module.exports = P2P;
 </script>
@@ -2336,7 +2434,8 @@ const P2P = (() => {
       const m = lines[i].text.match(/^key\s?words?\s*[:—–-]?\s*(.*)$/i);
       if (m) {
         let s = m[1];
-        if (!/\.\s*$/.test(s) && lines[i + 1] && lines[i + 1].text.length < 90 && !classify(lines[i + 1].text)) s += ' ' + lines[i + 1].text;
+        const nx = lines[i + 1];
+        if (!/\.\s*$/.test(s) && nx && nx.text.length < 90 && !classify(nx.text) && !nx.bold && nx.size <= lines[i].size * 1.05) s += ' ' + nx.text;
         keywords = s.split(/\s*[,;·•|]\s*/).map(k => k.replace(/\.$/, '').trim()).filter(k => k && k.length < 50).slice(0, 8);
         break;
       }
@@ -2376,7 +2475,7 @@ const P2P = (() => {
       }
       if (cur === 'skip') continue;
       if (/^key\s?words?\s*[:—–-]/i.test(t)) { skipKw = !/\.$/.test(t); continue; }
-      if (skipKw) { skipKw = false; if (t.length < 90 && !/\.\s/.test(t)) continue; }
+      if (skipKw) { skipKw = false; if (t.length < 90 && !/\.\s/.test(t) && !l.bold && l.size <= body * 1.05) continue; }
       // inline heading such as "Introduction: Ear, nose and throat emergencies are..."
       const inl = t.match(/^([A-Za-z][A-Za-z &]{2,40}?)\s*[:.—–]\s+(\S.{15,})$/);
       if (inl) {
@@ -3457,6 +3556,101 @@ const P2P = (() => {
     return { eyebrow, subtitle, stats: statsOut, cards, refs: st.refs || [] };
   }
 
+  // ---- revision notes: a high-yield topic carousel for medical students ----
+  // clinical sections in teaching order; head = heading words, cue = words that mark a sentence as belonging here
+  const CLIN = [
+    { key: 'def', label: 'Definition', head: /^(definition|overview|introduction|what is|background|epidemiolog)/, cue: /\b(is (a|an|the) (common |serious |acute |chronic )?\w*\s?(inflammation|infection|condition|disease|disorder|emergency)|is defined as|refers to|lifetime risk|incidence|prevalence|commonest|most common)\b/i, tone: 'light' },
+    { key: 'aet', label: 'Aetiology', head: /aetiolog|etiolog|^causes?\b|microbiolog|pathogens?|organisms?/, cue: /\b(caused by|is due to|bacteri\w*|virus|viral|organisms?|most often caused|commonest cause|causes include)\b/i, tone: 'light' },
+    { key: 'risk', label: 'Risk factors', head: /risk factor|predispos/, cue: /\b(risk factors?|increases? (the )?risk|is the main risk|more common in|predispos)\b/i, tone: 'light' },
+    { key: 'path', label: 'Pathophysiology', head: /pathophysiolog|pathogenesis|mechanism/, cue: /\b(leads? to|results? in|impairs?|build-up|invade|ischaemi)/i, tone: 'outline', flow: true },
+    { key: 'hx', label: 'History', head: /^(history|symptoms?|clinical (features?|presentation)|presentation)/, cue: /\b(present(s)? with|presentation|symptoms?|anorexia|nausea|vomiting|otalgia|cough|headache|fever)\b/i, tone: 'light' },
+    { key: 'ex', label: 'Examination', head: /^(examination|clinical signs?|signs?|physical)/, cue: /\b(on examination|examination (shows|reveals|finds)|tenderness|guarding|\w+'s sign|sign is|bulging|rash|murmur|palpable)\b/i, tone: 'light' },
+    { key: 'ix', label: 'Investigations', head: /^(investigat|diagnosis$|diagnostic|work-?up|tests?$|imaging)/, cue: /\b(blood tests?|white cell|C-reactive|CRP|ultrasound|CT\b|MRI|X-ray|culture|biopsy|pregnancy test|scor(e|ing system)|audiometry|tympanometry|ECG)\b/i, tone: 'light' },
+    { key: 'mx', label: 'Management', head: /manag|treat|therap/, cue: /\b(treat(ed|ment)?|managed?|management|antibiotics?|analgesia|surgery|surgical|appendicectomy|resuscitat\w*|admit|nil by mouth|fluids?)\b/i, tone: 'outline' },
+    { key: 'cx', label: 'Complications', head: /complicat/, cue: /\b(complications?|perforat\w*|abscess|peritonitis|meningitis)\b/i, tone: 'light' },
+    { key: 'red', label: 'Red flags', head: /red flag|warning sign|when to refer|urgent/, cue: /\b(urgent(ly)?|immediate(ly)?|life-threatening|refer(ral|red)? (urgently|immediately)|needs? urgent|emergency|sepsis)\b/i, tone: 'warn' },
+    { key: 'ddx', label: 'Differentials', head: /differential/, cue: /\b(differential|must be excluded|exclude|mimics?)\b/i, tone: 'light' },
+    { key: 'prev', label: 'Prevention', head: /prevent|vaccin|screening/, cue: /\b(prevent\w*|vaccin\w*|reduces? the risk)\b/i, tone: 'light' },
+    { key: 'pearl', label: 'High-yield pearls', head: /key points?|pearls?|summary|take[- ]home|high[- ]yield|conclusions?/, cue: null, tone: 'dark' },
+  ];
+  // match headings in an order where specific words win ("differential diagnosis" before "diagnosis")
+  const HEAD_ORDER = ['ddx', 'red', 'pearl', 'cx', 'prev', 'mx', 'ix', 'ex', 'hx', 'path', 'risk', 'aet', 'def'];
+  function clinHead(h) { const n = normHeading(h); for (const k of HEAD_ORDER) { const c = CLIN.find(x => x.key === k); if (c.head.test(n)) return k; } return null; }
+  function clinCue(text) { for (const c of CLIN) if (c.cue && c.cue.test(text)) return c.key; return null; }
+  const SPECIALTY = [[/\b(ear|otitis|tympanic|nose|nasal|epistaxis|throat|tonsil|laryn|sinus|ENT)\b/i, 'ENT'], [/\b(heart|cardiac|myocard|coronary|arrhythm|atrial)\b/i, 'Cardiology'], [/\b(lung|asthma|pneumon|bronch|COPD|respirat)\b/i, 'Respiratory'], [/\b(kidney|renal|nephr|urinary)\b/i, 'Renal'], [/\b(diabet|thyroid|adrenal|insulin|endocrin)\b/i, 'Endocrine'], [/\b(pregnan|obstetric|gynae|ovar|uter)\w*/i, 'O&G'], [/\b(stroke|seizure|epilep|neurolog|migraine|dementia)\b/i, 'Neurology'], [/\b(depress|anxiety|psychos|schizo|bipolar|psychiatr)\w*/i, 'Psychiatry'], [/\b(fracture|bone|joint|orthop)\w*/i, 'Orthopaedics'], [/\b(appendic|bowel|abdom|hernia|cholecyst|surgical)\w*/i, 'Surgery'], [/\b(liver|hepat|gastr|coeli|crohn|colitis)\w*/i, 'Gastroenterology'], [/\b(skin|rash|eczema|psoria|dermat)\w*/i, 'Dermatology'], [/\b(child|infant|neonat|paediatr)\w*/i, 'Paediatrics']];
+  // "Rebound tenderness and guarding suggest ..." -> bold the subject so the bullet can be skimmed
+  function boldSubject(t, kws) {
+    if (/\*/.test(t)) return t;
+    const m2 = t.match(/^(.{3,46}?)\s+(is|are|was|were|include|includes|causes?|suggests?|show|shows|needs?|must|may|can|should|leads?|usually|often|follows?)\b/);
+    const subj = m2 && m2[1];
+    const weak = /^(the|a|an|this|these|those|it|they|there|other|others|rare|some|many|most|patients?|examination|management|treatment|initial|always|signs?)\b/i;
+    if (subj && wc(subj) <= 6 && !weak.test(subj) && !/\b(and|or|of|with|the|a|in|to)$/i.test(subj) && !/\b(impairs?|invades?|leads?|causes?|results?)\b/i.test(subj)) return `**${subj}**${t.slice(subj.length)}`;
+    return boldKey(t, kws);
+  }
+  function buildRevision(m) {
+    const kws = (m.keywords || []).slice(0, 6), st = buildStory(m);
+    const topic = String(m.title || 'This topic').split(/\s*[:—–]\s+|\s+-\s+/)[0].trim();
+    const allText = [...(m.parts || []).map(p => p.text), ...Object.values(m.sections).map(x => x.text)].join(' ');
+    const abbr = (allText.match(new RegExp(`${topic.split(/\s+/).slice(-1)[0]}[^()]{0,40}\\(([A-Z]{2,6})\\)`)) || [])[1] || '';
+    const spec = (SPECIALTY.find(([re]) => re.test(m.title + ' ' + kws.join(' '))) || [null, 'Clinical'])[1];
+    const parts = (m.parts || []).filter(p => !/^(abstract|references?|keywords?|acknowledg)/i.test(p.heading));
+    const buckets = {}; CLIN.forEach(c => { buckets[c.key] = { from: null, items: [] }; });
+    const add = (k, text, where, page, byHead) => { const b = buckets[k]; if (b.items.some(x => x.text === text)) return; if (byHead && !b.from) b.from = { heading: where, page }; b.items.push({ text, where, page, byHead }); };
+    const headed = new Set();
+    parts.forEach(p => { const k = clinHead(p.heading); if (k) { headed.add(k); splitSentences(p.text).filter(x => wc(x) >= 4).forEach(x => add(k, x, p.heading, p.page, true)); } });
+    const unheaded = [...parts.filter(p => !clinHead(p.heading)), ...((m.sections.abstract && !parts.length) ? [{ heading: 'Abstract', text: m.sections.abstract.text }] : [])];
+    const looseSents = [...unheaded.flatMap(p => splitSentences(p.text).map(x => ({ x, p }))), ...(headed.size < 3 ? Object.values(m.sections).flatMap(sec => splitSentences(sec.text).map(x => ({ x, p: { heading: LABELS[sec.key] || sec.heading } }))) : [])];
+    looseSents.forEach(({ x, p }) => { if (wc(x) < 5) return; const k = clinCue(x); if (k && !headed.has(k)) add(k, x, p.heading, p.page, false); });
+    // red flags can also come from the management and complications sections
+    if (!headed.has('red')) ['mx', 'cx', 'ix', 'ex', 'hx'].forEach(k => buckets[k].items.forEach(it => { if (CLIN.find(c => c.key === 'red').cue.test(it.text) && buckets.red.items.length < 4) add('red', it.text, it.where, it.page, false); }));
+    if (!buckets.pearl.items.length) (st.items || []).forEach(it => add('pearl', it.text, 'Summary', null, false));
+    const S2 = t => shorten(t, 16).replace(/\s*…$/, '');
+    const bullets = (k, n = 4) => buckets[k].items.slice(0, n).map(it => boldSubject(S2(it.text), kws));
+    const slides = [];
+    const mk = (label, cards, srcItems, role) => slides.push({ id: id('s'), rev: true, role: role || 'rev', type: 'sheet', label, heading: label, cards, srcs: (srcItems || []).slice(0, 2).map(it => ({ text: it.text, where: [it.where, it.page ? 'page ' + it.page : ''].filter(Boolean).join(', ') })) });
+    const many = (m.topics || []).length >= 3 && headed.size < 3;
+    if (many) {
+      // a review of several conditions: overview, one slide per condition ("recognise" and "manage"), red flags, pearls
+      const URG = /\b(urgent(ly)?|immediately|life-threatening|true emergency|must be (removed|referred|seen)|without delay|airway compromise)\b/i;
+      const ov = splitSentences(sentencesUpTo(st.question, 40)).filter(x => wc(x) >= 5);
+      if (ov.length) mk('Overview', [{ tone: 'light', title: '', blocks: [{ k: 'ul', items: ov.slice(0, 3).map(x => boldSubject(S2(x), kws)) }] }], ov.map(t => ({ text: t, where: 'Introduction' })), 'rev-def');
+      const allRed = [];
+      (m.topics || []).slice(0, 8).forEach(tp => {
+        const ss = (tp.ranked || []).map(x => x.text);
+        const rec = ss.filter(x => /\b(present|symptom|sign|tenderness|fever|pain|stridor|drool|bleed|defined as|is a|are common)\w*/i.test(x)).slice(0, 3);
+        const man = (tp.steps || []).length ? null : ss.filter(x => CLIN.find(c => c.key === 'mx').cue.test(x) && !rec.includes(x)).slice(0, 3);
+        const red = ss.filter(x => URG.test(x) && !rec.includes(x) && !(man || []).includes(x)).slice(0, 1);
+        red.forEach(x => allRed.push({ text: x, where: tp.heading, page: tp.page }));
+        const cards = [{ tone: 'light', title: 'Recognise', blocks: [{ k: 'ul', items: (rec.length ? rec : ss.slice(0, 2)).map(x => boldSubject(S2(x), kws)) }] }];
+        if ((tp.steps || []).length) cards.push({ tone: 'outline', title: 'Manage', blocks: [{ k: 'flow', vertical: true, steps: tp.steps.slice(0, 5).map((x, i, a) => ({ title: x, text: '', tone: i === a.length - 1 ? 'accent' : '' })) }] });
+        else if (man && man.length) cards.push({ tone: 'outline', title: 'Manage', blocks: [{ k: 'ul', items: man.map(x => boldSubject(S2(x), kws)) }] });
+        if (red.length) cards.push({ tone: 'warn', title: 'Red flag', blocks: [{ k: 'p', text: boldSubject(S2(red[0]), kws) }] });
+        mk(tp.heading.replace(/^[^:]+:\s*/, x => x.length < 22 ? '' : x) || tp.heading, cards, ss.slice(0, 1).map(t => ({ text: t, where: tp.heading, page: tp.page })));
+      });
+      if (allRed.length >= 2) mk('Red flags', [{ tone: 'warn', title: '', blocks: [{ k: 'ul', items: allRed.slice(0, 5).map(x => boldSubject(S2(x.text), kws)) }] }], allRed, 'rev-red');
+      if ((st.items || []).length) mk('High-yield pearls', [{ tone: 'dark', title: '', blocks: [{ k: 'ul', items: st.items.slice(0, 4).map(x => boldSubject(S2(x.text), kws)) }] }], st.items.map(x => ({ text: x.text, where: 'Key points' })), 'rev-pearl');
+    } else {
+      const has = k => buckets[k].items.length > 0, words = k => buckets[k].items.slice(0, 4).reduce((a, it) => a + wc(S2(it.text)), 0);
+      const card = k => { const c = CLIN.find(x => x.key === k); return { tone: c.tone, title: '', blocks: [c.flow ? { k: 'flow', vertical: true, steps: buckets[k].items.slice(0, 4).map((it, i, a) => ({ title: '', text: boldSubject(S2(it.text), kws), tone: i === a.length - 1 ? 'accent' : '' })) } : { k: 'ul', items: bullets(k) }] }; };
+      const PAIRS = { aet: 'risk', hx: 'ex', ddx: 'prev' };
+      const done = new Set();
+      for (const c of CLIN) {
+        if (done.has(c.key) || !has(c.key)) continue;
+        const partner = PAIRS[c.key];
+        if (partner && has(partner) && words(c.key) + words(partner) <= 64) {
+          const a = card(c.key), b = card(partner); a.title = c.label; b.title = CLIN.find(x => x.key === partner).label;
+          mk(c.key === 'hx' ? 'Clinical features' : `${c.label} and ${CLIN.find(x => x.key === partner).label.toLowerCase()}`, [a, b], [...buckets[c.key].items, ...buckets[partner].items], 'rev-' + c.key);
+          done.add(c.key); done.add(partner); continue;
+        }
+        mk(c.label, [card(c.key)], buckets[c.key].items, 'rev-' + c.key); done.add(c.key);
+      }
+    }
+    const contents = slides.map(x => x.label);
+    const cover = { id: id('s'), rev: true, role: 'hook', type: 'hook', label: 'Revision notes', heading: topic, hooks: [topic, `${topic}: high-yield revision`, `${topic} in ${slides.length} slides`], hookIndex: 0, body: abbr ? `${abbr} · high-yield revision` : 'High-yield revision', eyebrow: `${spec} · Medical student revision`, contents };
+    const cite = { id: id('s'), rev: true, role: 'cite', type: 'cite', label: 'Source', heading: 'Revise from the source', body: 'Revision aid for medical students. Not a substitute for local clinical guidelines. Save this for exam week and share it with your study group.' };
+    return [cover, ...slides, cite];
+  }
+
   function buildReviewPoster(m) {
     const join = (arr, n, per) => arr.slice(0, n).sort((a, b) => a.order - b.order).map(x => shorten(x.text, per)).join(' ');
     const intro = pool(m, ['abstract', 'introduction'], { decay: 0.1 });
@@ -3664,7 +3858,7 @@ const P2P = (() => {
     };
   }
 
-  return { buildSheet, boldKey, buildTalk, factCheck, studyContext, chartFor, numTokens, toQuestion, objectivesIn, OUTLINES, talkSeconds, speak, buildStory, buildBillboard, detectPrisma, _orderPage: orderPage, extractLines, buildModel, buildSlides, buildPoster, cheatFrom, hookOptions, ctaFor, AUD, topicNoun, findStats, shorten, cleanSentence, wc, shortCite, LABELS, ORDER, STAT_RE, splitSentences };
+  return { buildRevision, clinHead, clinCue, buildSheet, boldKey, buildTalk, factCheck, studyContext, chartFor, numTokens, toQuestion, objectivesIn, OUTLINES, talkSeconds, speak, buildStory, buildBillboard, detectPrisma, _orderPage: orderPage, extractLines, buildModel, buildSlides, buildPoster, cheatFrom, hookOptions, ctaFor, AUD, topicNoun, findStats, shorten, cleanSentence, wc, shortCite, LABELS, ORDER, STAT_RE, splitSentences };
 })();
 if (typeof module !== 'undefined') module.exports = P2P;
 
@@ -3909,7 +4103,7 @@ const R = (() => {
   // ---- slide ----
   // tt = seconds since the slide appeared (undefined = finished, static image)
   function renderSlide(cv, s, i, n, T, ctxData, tt) {
-    if (T.deco === 'sheet') return renderSheetSlide(cv, s, i, n, T, ctxData);
+    if (T.deco === 'sheet' || s.rev || s.type === 'sheet') return renderSheetSlide(cv, s, i, n, T, ctxData);
     const W = 1080, H = 1350, P = 92;
     const ctx = cv.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -5331,13 +5525,16 @@ const R = (() => {
     const meta = ctxData.meta || {}, kws = ctxData.keywords || [], brand = ctxData.brand || {};
     const B = t => (typeof P2P !== 'undefined' && P2P.boldKey) ? P2P.boldKey(t, kws) : t;
     // top line and footer
-    eyebrowText(ctx, T, brand.series || (s.type === 'hook' ? [meta.journal, meta.year].filter(Boolean).join(' · ') || 'New research' : 'Paper summary'), P, P + 18, 22, C.head);
+    eyebrowText(ctx, T, (s.type === 'hook' && s.eyebrow) || brand.series || (s.rev ? 'Revision notes' : s.type === 'hook' ? [meta.journal, meta.year].filter(Boolean).join(' · ') || 'New research' : 'Paper summary'), P, P + 18, 22, C.head);
     ctx.font = fontStr(T.body, 22, 600); ctx.fillStyle = T.muted; ctx.textAlign = 'right'; ctx.fillText(`${i + 1} / ${n}`, W - P, P + 18); ctx.textAlign = 'left';
     ctx.fillStyle = C.head; ctx.fillRect(P, P + 42, W - 2 * P, 3);
     const footY = H - 70;
     ctx.fillStyle = T.line; ctx.fillRect(P, footY - 44, W - 2 * P, 2);
     ctx.font = fontStr(T.body, 22); ctx.fillStyle = T.muted; ctx.fillText(ctxData.footer || '', P, footY);
-    if (i < n - 1) { ctx.font = fontStr(T.body, 24, 700); ctx.fillStyle = C.head; ctx.textAlign = 'right'; ctx.fillText('Swipe  →', W - P, footY); ctx.textAlign = 'left'; }
+    if (i < n - 1) {
+      ctx.font = fontStr(T.body, 24, 700); ctx.fillStyle = C.head; ctx.textAlign = 'right'; ctx.fillText('Swipe', W - P - 40, footY); ctx.textAlign = 'left';
+      ctx.strokeStyle = C.head; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(W - P - 28, footY - 8); ctx.lineTo(W - P, footY - 8); ctx.moveTo(W - P - 10, footY - 17); ctx.lineTo(W - P, footY - 8); ctx.lineTo(W - P - 10, footY + 1); ctx.stroke();
+    }
     const top = P + 90, bottom = H - 140, cw = W - 2 * P;
     const heading = (num, text, y) => { const r = fit(ctx, (num ? num + ' · ' : '') + (text || ''), T.display, { w: cw, h: 200 }, { max: 66, min: 44, lh: 1.1, maxLines: 3 }); drawText(ctx, r, T.display, P, y, { lh: 1.1, color: C.head }); return r.lines.length * r.size * 1.1; };
     // the card grows to fill the slide (up to 50 px text) and shrinks no lower than 30 px
@@ -5354,9 +5551,22 @@ const R = (() => {
       const hr = fit(ctx, s.heading, T.display, { w: cw, h: 520 }, { max: 112, min: 60, lh: 1.06 });
       if (!hr.ok) warn.push('Headline is too long to fit. Shorten it.');
       y += drawText(ctx, hr, T.display, P, y, { lh: 1.06, color: C.head, hl: T.accent }) + 34;
-      const tr = fit(ctx, meta.title || '', T.body, { w: cw, h: 120 }, { max: 32, min: 24, lh: 1.3, maxLines: 3 });
+      const subT = s.contents && String(meta.title || '').trim().toLowerCase() === String(s.heading || '').replace(/\*/g, '').trim().toLowerCase() ? (s.body || '') : (s.contents && s.body ? s.body + ' · ' : '') + (meta.title || '');
+      const tr = fit(ctx, subT, T.body, { w: cw, h: 120 }, { max: 32, min: 24, lh: 1.3, maxLines: 3 });
       y += drawText(ctx, tr, T.body, P, y, { lh: 1.3, color: T.muted }) + 40;
-      const stats = (ctxData.stats || []).slice(0, 3);
+      const stats = s.contents ? [] : (ctxData.stats || []).slice(0, 3);
+      if (s.contents && s.contents.length) {
+        // "In this post": a numbered contents list in two columns
+        eyebrowText(ctx, T, 'In this post', P, y + 8, 22, C.head); y += 34;
+        const items = s.contents.slice(0, 14), half = Math.ceil(items.length / 2), colW = (cw - 24) / 2, rowH = Math.min(66, (bottom - 110 - y) / half);
+        items.forEach((t, k) => {
+          const cx = P + (k < half ? 0 : colW + 24), cy = y + (k % half) * rowH;
+          ctx.fillStyle = C.chip; rr(ctx, cx, cy, colW, rowH - 8, 10); ctx.fill();
+          ctx.font = fontStr(T.body, Math.min(24, rowH * 0.48), 700); ctx.fillStyle = C.head; ctx.fillText(String(k + 1).padStart(2, '0'), cx + 14, cy + (rowH - 8) / 2 + 8);
+          const r = fit(ctx, t, T.body, { w: colW - 70, h: rowH - 12 }, { max: Math.min(30, rowH * 0.5), min: 16, lh: 1.1, maxLines: 1 }); drawText(ctx, r, T.body, cx + 58, cy + (rowH - 8 - r.size * 1.1) / 2, { lh: 1.1, color: T.ink });
+        });
+        y += half * rowH + 20;
+      }
       if (stats.length) { const g = 18, w = (cw - g * (stats.length - 1)) / stats.length; stats.forEach((st, k) => sheetStat(ctx, T, st, P + k * (w + g), y, w, 190, 40)); y += 190 + 36; }
       let tx = P;
       if (brand.avatar) { avatar(ctx, brand.avatar, P, bottom - 74, 64, C.head); tx = P + 80; }
@@ -5376,7 +5586,14 @@ const R = (() => {
     const num = i;
     y += heading(num, s.heading || label, y) + 30;
     const tone = /limit|keep in mind|caution|risk/i.test(label + ' ' + (s.heading || '')) ? 'warn' : /why|matter|mean|take/i.test(label + ' ' + (s.heading || '')) ? 'dark' : 'light';
-    if (s.type === 'stat') {
+    if (s.type === 'sheet') {
+      const cards = (s.cards || []).filter(c => !c.hidden), g = 22, room = bottom - y - 200;
+      const total = b0 => cards.reduce((a, c) => a + sheetCard(ctx, T, c, P, 0, cw, b0, false), 0) + g * Math.max(0, cards.length - 1);
+      let lo = 28, hi = 50;
+      if (total(hi) <= room) lo = hi; else if (total(lo) > bottom - y) warn.push('This slide has a lot of text. Shorten it or hide a card.'); else for (let k = 0; k < 12; k++) { const mid = (lo + hi) / 2; if (total(mid) <= room) lo = mid; else hi = mid; }
+      let yy = y; cards.forEach(c => { yy += sheetCard(ctx, T, c, P, yy, cw, lo, true) + g; });
+      ctxData.used = yy - g;
+    } else if (s.type === 'stat') {
       const c = { tone: 'light', blocks: [s.big ? { k: 'big', big: s.big, label: s.bigLabel || '' } : null, s.ctx ? { k: 'p', text: String(s.ctx).toUpperCase(), small: true } : null, s.body ? { k: 'p', text: B(s.body) } : null].filter(Boolean) };
       const ch = typeof P2P !== 'undefined' && P2P.chartFor && s.visual !== 'none' ? P2P.chartFor(s.body || '', s.big || '', s.bigLabel || '') : null;
       y += placeCard(c, y, (bottom - y) - (ch ? 470 : 0), 46) + 30;
@@ -5630,7 +5847,7 @@ function exampleFigure() {
 
 // ---------- persistence & history ----------
 const KEY = 'paper2poster-v1';
-function snapshot() { return JSON.stringify({ slides: S.slides, talk: S.talk, poster: S.poster, theme: S.theme, posterSize: S.posterSize, handle: S.handle, meta: metaOf(S.model) }); }
+function snapshot() { return JSON.stringify({ slides: S.slides, postType: S.postType || 'summary', otherSlides: S.otherSlides || null, talk: S.talk, poster: S.poster, theme: S.theme, posterSize: S.posterSize, handle: S.handle, meta: metaOf(S.model) }); }
 function metaOf(m) { return m ? { title: m.title, authors: m.authors, affiliations: m.affiliations, journal: m.journal, year: m.year, doi: m.doi, keywords: m.keywords } : null; }
 const hist = { past: [], future: [], last: null, t: 0 };
 function commit(now) {
@@ -5638,7 +5855,7 @@ function commit(now) {
   const go = () => { const snap = snapshot(); if (snap === hist.last) return; if (hist.last) hist.past.push(hist.last); if (hist.past.length > 80) hist.past.shift(); hist.last = snap; hist.future = []; updateUndo(); save(); };
   if (now) go(); else hist.t = setTimeout(go, 450);
 }
-function restoreSnap(snap) { const o = JSON.parse(snap); Object.assign(S, { slides: o.slides, talk: o.talk || null, poster: o.poster, theme: o.theme, posterSize: o.posterSize, handle: o.handle }); Object.assign(S.model, o.meta); hist.last = snap; fillMeta(); renderThemes(); renderAll(true); save(); updateUndo(); }
+function restoreSnap(snap) { const o = JSON.parse(snap); Object.assign(S, { slides: o.slides, postType: o.postType || 'summary', otherSlides: o.otherSlides || null, talk: o.talk || null, poster: o.poster, theme: o.theme, posterSize: o.posterSize, handle: o.handle }); Object.assign(S.model, o.meta); hist.last = snap; fillMeta(); renderThemes(); renderAll(true); save(); updateUndo(); }
 function undo() { commit(true); if (!hist.past.length) return; hist.future.push(hist.last); restoreSnap(hist.past.pop()); }
 function redo() { if (!hist.future.length) return; hist.past.push(hist.last); restoreSnap(hist.future.pop()); }
 function updateUndo() { $('#undoBtn').disabled = !hist.past.length; $('#redoBtn').disabled = !hist.future.length; }
@@ -5653,7 +5870,7 @@ let saveT = 0;
 function save() {
   clearTimeout(saveT);
   saveT = setTimeout(async () => {
-    const data = { v: 1, at: Date.now(), model: S.model, slides: S.slides, talk: S.talk, poster: S.poster, theme: S.theme, posterSize: S.posterSize, handle: S.handle, source: S.source, figures: S.figures };
+    const data = { v: 1, at: Date.now(), model: S.model, slides: S.slides, postType: S.postType || 'summary', otherSlides: S.otherSlides || null, talk: S.talk, poster: S.poster, theme: S.theme, posterSize: S.posterSize, handle: S.handle, source: S.source, figures: S.figures };
     let idbOk = false;
     try { idbOk = await IDB.set(KEY, JSON.parse(JSON.stringify(data))); } catch (e) { idbOk = false; }
     try {
@@ -5715,6 +5932,7 @@ function fillBrand() {
 }
 function applyVoice() {
   const cfg = { ...S.cfg, series: S.brand.series };
+  if (S.postType === 'revision') { scheduleRender(); renderInspector(); commit(true); return; }
   const by = r => S.slides.find(s => s.role === r);
   const review = S.model.mode === 'review';
   const h = by('hook');
@@ -5804,6 +6022,7 @@ function posterMeta() { const m = metaOf(S.model); return { ...m, affiliations: 
 function figMap() { const o = {}; for (const f of S.figures) if (imgs[f.id]) o[f.id] = imgs[f.id]; return o; }
 
 function renderAll(rebuildInspector) {
+  syncPostType();
   if (rebuildInspector) renderInspector();
   renderFigs();
   renderCanvases();
@@ -5898,6 +6117,16 @@ function renderInspector() {
   } else if (s.type !== 'stat') {
     h += `<label class="f">Heading<input type="text" id="iHeading" value="${esc(s.heading)}"></label>`;
   }
+  if (s.type === 'sheet') {
+    (s.cards || []).forEach((c, ci) => {
+      let b = `<div class="blk" data-rc="${ci}"><h4><span>${esc(c.title || 'Card ' + (ci + 1))}</span></h4>`;
+      b += `<label class="f">Card heading<input type="text" data-rc="${ci}" data-rf="title" value="${esc(c.title || '')}"></label>`;
+      (c.blocks || []).forEach((bl, bi) => { if (BLOCK_LABEL[bl.k]) b += `<label class="f">${BLOCK_LABEL[bl.k]}<textarea data-rc="${ci}" data-rb="${bi}" rows="${Math.min(7, Math.max(2, blockText(bl).split('\n').length + 1))}">${esc(blockText(bl))}</textarea></label>`; });
+      b += `<label class="f">Colour<select data-rc="${ci}" data-rf="tone">${Object.entries(SHEET_TONES).map(([k, v]) => `<option value="${k}" ${k === (c.tone || 'light') ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>`;
+      h += b;
+    });
+    h += `<div id="iWc">${wcTag(sheetWords(s), 40)}</div><p class="hint">Wrap words in **double stars** to make them bold. Check every line against the source before posting.</p>`;
+  }
   if (s.type === 'stat') {
     h += `<div class="row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label class="f">Big number<input type="text" id="iBig" value="${esc(s.big)}"></label><label class="f">Under the number<input type="text" id="iBigLabel" value="${esc(s.bigLabel)}"></label></div>`;
   }
@@ -5915,7 +6144,7 @@ function renderInspector() {
   if (s.type === 'text') h += `<label class="f">Step diagram (optional, one step per line)<textarea id="iSteps" rows="3" placeholder="Assess\nTreat\nRefer">${esc((s.steps || []).join('\n'))}</textarea></label>`;
   if (R.visualFor({ ...s, visual: 'auto' })) h += `<label class="f">Graphic<select id="iVis"><option value="auto">${({ donut: 'Donut chart', bars: 'Comparison bars', people: 'People grid', steps: 'Step diagram' })[R.visualFor({ ...s, visual: 'auto' }).kind]}</option><option value="none" ${s.visual === 'none' ? 'selected' : ''}>None</option></select></label>`;
   if (s.type === 'figure') h += `<label class="f">Figure<select id="iFig">${FIG_OPTS(s.figureId)}</select></label>${S.figures.length ? '' : '<p class="hint">Add a figure from the left panel to show it on this slide.</p>'}`;
-  if (s.type !== 'cite') h += `<label class="f">Icon<select id="iIcon">${ICON_OPTS()}</select></label>`;
+  if (s.type !== 'cite' && s.type !== 'sheet') h += `<label class="f">Icon<select id="iIcon">${ICON_OPTS()}</select></label>`;
   h += aiSlideBox(s);
   h += `<div class="row"><button class="btn sm ghost" id="iUp" ${S.sel.slide === 0 ? 'disabled' : ''}>Move earlier</button><button class="btn sm ghost" id="iDown" ${S.sel.slide === S.slides.length - 1 ? 'disabled' : ''}>Move later</button></div></div>`;
   el.innerHTML = h;
@@ -5946,7 +6175,31 @@ function renderInspector() {
   on('iCheatRefresh', 'click', () => { refreshCheat(); renderInspector(); scheduleRender(); commit(true); });
   on('iSteps', 'input', e => { s.steps = e.target.value.split('\n'); changed(); });
   on('iVis', 'change', e => { s.visual = e.target.value; scheduleRender(); commit(true); });
+  el.querySelectorAll('textarea[data-rb]').forEach(t => t.addEventListener('input', e => { setBlockText(s.cards[+t.dataset.rc].blocks[+t.dataset.rb], e.target.value); const w = $('#iWc'); if (w) w.innerHTML = wcTag(sheetWords(s), 40); changed(); }));
+  el.querySelectorAll('[data-rf]').forEach(i2 => i2.addEventListener(i2.tagName === 'SELECT' ? 'change' : 'input', e => { const c = s.cards[+i2.dataset.rc]; c[i2.dataset.rf] = e.target.value; if (i2.tagName === 'SELECT') { scheduleRender(); commit(true); } else changed(); }));
 }
+function sheetWords(s) { return (s.cards || []).map(c => (c.blocks || []).map(blockText).join(' ')).join(' '); }
+function sheetLines(s) { return (s.cards || []).flatMap(c => (c.blocks || []).flatMap(b => blockText(b).split('\n'))).map(x => x.replace(/\s*\|\s*/g, ': ').trim()).filter(Boolean); }
+// ---------- post type: paper summary or revision notes ----------
+function setPostType(t) {
+  if (!S.model || t === (S.postType || 'summary')) return;
+  commit(true);
+  const cur = S.slides;
+  S.slides = S.otherSlides || (t === 'revision' ? P2P.buildRevision(S.model) : P2P.buildSlides(S.model, { ...S.cfg, series: S.brand.series }));
+  S.otherSlides = cur; S.postType = t; S.sel.slide = 0;
+  if (typeof slideCanvases !== 'undefined' && slideCanvases.clear) slideCanvases.clear();
+  $('#strip').innerHTML = '';
+  syncPostType(); renderAll(true); commit(true);
+  const few = t === 'revision' && S.slides.filter(x => x.type === 'sheet').length < 4;
+  toast(few ? 'Only a few clinical sections were found. Revision notes work best with a clinical review or guideline (headings like Definition, Investigations, Management).' : t === 'revision' ? 'Revision notes built from the paper. Your paper summary is kept: switch back any time.' : 'Back to the paper summary.', few ? 6000 : 2600);
+}
+function syncPostType() {
+  const t = S.postType || 'summary';
+  document.querySelectorAll('input[name=ptype]').forEach(r => { r.checked = r.value === t; });
+  const hint = $('#ptHint'); if (hint) hint.textContent = t === 'revision' ? 'High-yield notes in clinical order (definition, causes, features, investigations, management, red flags, pearls). Works best with a clinical review or guideline.' : 'A summary of the study: hook, method, findings and why it matters.';
+  const pol = $('#aiPolish'); if (pol) pol.hidden = t === 'revision';
+}
+document.querySelectorAll('input[name=ptype]').forEach(r => r.addEventListener('change', () => { if (r.checked) setPostType(r.value); }));
 function moveSlide(d) { const i = S.sel.slide, j = i + d; if (j < 0 || j >= S.slides.length) return; [S.slides[i], S.slides[j]] = [S.slides[j], S.slides[i]]; S.sel.slide = j; renderAll(true); commit(true); }
 function updateWarnBoxes() {
   const box = $('#warns'); if (!box) return;
@@ -6314,7 +6567,8 @@ $('#pLayout').addEventListener('change', e => { ensureBillboard(); S.poster.layo
 
 // ---------- build ----------
 function buildOutputs() {
-  S.slides = P2P.buildSlides(S.model, { ...S.cfg, series: S.brand.series });
+  const sum = P2P.buildSlides(S.model, { ...S.cfg, series: S.brand.series });
+  if (S.postType === 'revision') { S.slides = P2P.buildRevision(S.model); S.otherSlides = sum; } else { S.postType = 'summary'; S.slides = sum; S.otherSlides = null; }
   S.poster = P2P.buildPoster(S.model);
   S.talk = null; S.talk = { ...P2P.buildTalk(S.model, talkCfg()), edited: false };
   S.sel.slide = 0; S.sel.block = 'intro'; S.sel.talk = 0; if (typeof talkCanvases !== 'undefined') { talkCanvases.clear(); $('#tStrip').innerHTML = ''; }
@@ -6673,6 +6927,7 @@ function renderAiBar() {
 }
 async function polishAll() {
   const out = $('#aiBarOut');
+  if (S.postType === 'revision') { toast('Polish works on paper summaries. Edit revision cards in the panel on the right.'); return; }
   if (S.model.mode === 'review') return polishReview(out);
   const j = await ask(`${FACTS} ${PLAIN} No hashtags.\n\nRewrite the text of an Instagram carousel (1080x1350 slides) that explains this paper to a general audience. Reply with only this JSON object:\n{"hook": "headline for slide 1, max 10 words", "problem": "why the study was needed, max 22 words", "method": ["3 short points about what the researchers did, max 8 words each"], "sample": {"big": "the sample size exactly as in the paper, e.g. 612", "label": "who took part, max 4 words", "caption": "max 16 words"}, "finding1": {"big": "the single most striking number from the results, copied exactly, e.g. 41%", "caption": "what that number means, max 18 words"}, "finding2": "a second key result, max 20 words", "why": "why it matters, max 22 words", "limitation": "the main limitation, max 18 words"}\nUse null for any part the paper does not support.\n\nPaper excerpt:\n${paperContext()}`, out, { json: true, tier: 'default', cache: false });
   if (!j || typeof j !== 'object') return;
@@ -6875,7 +7130,7 @@ $('#exportVideo').addEventListener('click', async e => {
 function bindBrand() {
   $('#bSeries').addEventListener('input', e => {
     S.brand.series = e.target.value; saveBrand();
-    const h = S.slides.find(s => s.role === 'hook');
+    const h = S.slides.find(s => s.role === 'hook' && !s.rev);
     if (h) h.label = S.brand.series.trim() || (S.cfg.author ? (S.model.mode === 'review' ? 'Our new review' : 'Our new research') : (S.model.mode === 'review' ? 'Review' : 'New research'));
     scheduleRender(); commit();
   });
@@ -6925,6 +7180,7 @@ function creditLine() {
   return `Paper: "${m.title}" by ${cite || 'the authors'}${m.journal ? `, ${m.journal}` : ''}. All credit to the authors.`;
 }
 function keyPoints(max = 4) {
+  if (S.postType === 'revision') return visibleSlides().filter(s => s.type === 'sheet').slice(0, max).map(s => plain(s.heading) + ': ' + plain(sheetLines(s)[0] || '')).filter(Boolean);
   return visibleSlides().filter(s => ['problem', 'finding1', 'finding2', 'why', 'topic', 'sample'].includes(s.role)).slice(0, max)
     .map(s => (s.role === 'topic' ? plain(s.heading) + ': ' : '') + plain(s.body)).filter(Boolean);
 }
@@ -6940,6 +7196,7 @@ function kitAlt() {
     if (s.type === 'hook') d = plain(s.heading);
     else if (s.type === 'stat') d = `${plain(s.big)} ${plain(s.bigLabel)}. ${plain(s.body)}`;
     else if (s.type === 'list') d = `${plain(s.heading)}: ${(s.bullets || []).filter(Boolean).map(plain).join('; ')}.`;
+    else if (s.type === 'sheet') d = `${plain(s.heading)}. ${sheetLines(s).map(plain).join('. ')}.`;
     else if (s.type === 'cheat') d = `${plain(s.heading)}. ${(s.items || []).map(it => `${plain(it.title)}: ${plain(it.text)}`).join('. ')}.`;
     else if (s.type === 'cite') d = `Citation: ${m.title}, by ${(m.authors || []).join(', ')}${m.journal ? '. ' + m.journal : ''}${m.year ? ', ' + m.year : ''}.${m.doi ? ' DOI ' + m.doi + '.' : ''}`;
     else { d = `${plain(s.heading)}. ${plain(s.body)}`; const st = (s.steps || []).filter(Boolean); if (st.length) d += ` Steps: ${st.map(plain).join(', ')}.`; if (s.type === 'figure' && s.figureId) d += ' Includes a figure from the paper.'; }
@@ -7192,6 +7449,7 @@ function carouselClaims() {
     const where = `Slide ${i + 1} · ${s.label}`, push = (t, o = {}) => { if (t && String(t).trim()) out.push({ where, text: String(t), ...o }); };
     if (s.big) push(`${s.big} ${s.bigLabel || ''}`, { numbersOnly: true });
     if (s.type !== 'hook' && s.type !== 'cite') push(s.body); (s.bullets || []).forEach(b => push(b));
+    if (s.type === 'sheet') sheetLines(s).forEach(l => push(l.replace(/\*/g, '')));
     if (s.type === 'hook' && isNum(s.heading || '')) push(s.heading, { numbersOnly: true });
   });
   return out.filter(x => x.numbersOnly ? isNum(x.text) : P2P.wc(x.text) >= 5 || isNum(x.text));
@@ -7521,7 +7779,7 @@ $('#undoBtn').addEventListener('click', undo); $('#redoBtn').addEventListener('c
   await loadBrand(); fillBrand(); bindBrand();
   const saved = await loadProject();
   if (saved && saved.model && saved.slides) {
-    Object.assign(S, { model: saved.model, slides: saved.slides, talk: saved.talk || null, poster: saved.poster, theme: saved.theme || 'academic', posterSize: saved.posterSize || 'a0', handle: saved.handle || '', source: saved.source || S.source, figures: saved.figures || [] });
+    Object.assign(S, { model: saved.model, slides: saved.slides, postType: saved.postType || 'summary', otherSlides: saved.otherSlides || null, talk: saved.talk || null, poster: saved.poster, theme: saved.theme || 'academic', posterSize: saved.posterSize || 'a0', handle: saved.handle || '', source: saved.source || S.source, figures: saved.figures || [] });
     if (!R.THEMES[S.theme]) S.theme = 'academic';
     for (const f of S.figures) { const im = new Image(); im.src = f.src; try { await im.decode(); imgs[f.id] = im; } catch (e) {} }
     fillMeta(); renderThemes();

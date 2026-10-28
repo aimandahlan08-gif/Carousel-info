@@ -42,6 +42,13 @@ const go = async t => { if (t === 'extracted') { $('#fcBadge').click(); await sl
   // layout change on a text slide, cheat editor, source box
   for (const b of thumbs) { b.click(); await sleep(20); if ($('#iLayout')) { $('#iLayout').value = 'quote'; $('#iLayout').dispatchEvent(new w.Event('change')); console.log('layout set on', $('#insp .insp-h .t').textContent, '| source box:', !!$('details.src')); break; } }
   for (const b of thumbs) { b.click(); await sleep(20); if ($('#iItems')) { console.log('cheat items:', $('#iItems').value.split('\n').length); $('#iCheatRefresh').click(); break; } }
+  // revision notes post type
+  const rr = [...w.document.querySelectorAll('input[name=ptype]')].find(r => r.value === 'revision'); rr.checked = true; rr.dispatchEvent(new w.Event('change')); await sleep(200);
+  console.log('revision slides:', $('#strip').children.length, '| hint:', $('#ptHint').textContent.slice(0, 30));
+  for (const b of [...$('#strip').children]) { b.click(); await sleep(20); const t = $('#insp textarea[data-rb]'); if (t) { t.value = t.value + ' **edited**'; t.dispatchEvent(new w.Event('input')); console.log('sheet card editor on', $('#insp .insp-h .t').textContent); break; } }
+  await go('kit'); await sleep(150); console.log('revision alt text has sheet lines:', /\./.test(($('#kit-alt') || {}).value || '')); await go('carousel');
+  const sr = [...w.document.querySelectorAll('input[name=ptype]')].find(r => r.value === 'summary'); sr.checked = true; sr.dispatchEvent(new w.Event('change')); await sleep(200);
+  console.log('back to summary slides:', $('#strip').children.length);
   // undo / redo
   $('#undoBtn').click(); await sleep(50); $('#redoBtn').click(); await sleep(50);
   // export menu opens

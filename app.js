@@ -198,6 +198,7 @@ function renderCanvases() {
   drawPoster();
   if (S.sel.tab === 'talk') renderTalk();
   updateWarnBoxes();
+  if (typeof updateFactBadge === 'function') updateFactBadge();
   $('#ctCar').textContent = vis.length;
 }
 
@@ -250,7 +251,7 @@ function renderAll(rebuildInspector) {
   if (rebuildInspector) renderInspector();
   renderFigs();
   renderCanvases();
-  if (S.sel.tab === 'extracted') renderExtracted();
+  if (!$('#checkModal').hidden) renderExtracted();
 }
 
 // ---------- left rail ----------
@@ -362,6 +363,7 @@ function renderInspector() {
   h += aiSlideBox(s);
   h += `<div class="row"><button class="btn sm ghost" id="iUp" ${S.sel.slide === 0 ? 'disabled' : ''}>Move earlier</button><button class="btn sm ghost" id="iDown" ${S.sel.slide === S.slides.length - 1 ? 'disabled' : ''}>Move later</button></div></div>`;
   el.innerHTML = h;
+  tuck(el, ['#iShow', '#iLabel', '#iLayout', '#iSteps', '#iVis', '#iIcon', '#iUp', 'details.src']);
   wireAiSlide(s);
   updateWarnBoxes();
   const on = (id, ev, fn) => { const x = $('#' + id); if (x) x.addEventListener(ev, fn); };
@@ -579,18 +581,121 @@ function renderExtracted() {
   wireAiPaper();
 }
 
-// ---------- tabs ----------
-document.querySelector('.tabs').addEventListener('click', e => {
-  const t = e.target.closest('.tab'); if (!t) return;
-  S.sel.tab = t.dataset.tab;
-  document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x === t));
-  $('#vCarousel').hidden = S.sel.tab !== 'carousel'; $('#vPoster').hidden = S.sel.tab !== 'poster'; $('#vExtracted').hidden = S.sel.tab !== 'extracted'; $('#vKit').hidden = S.sel.tab !== 'kit'; $('#vTalk').hidden = S.sel.tab !== 'talk';
-  $('#fabEdit').textContent = S.sel.tab === 'poster' ? 'Edit poster' : 'Edit slide';
-  if (S.sel.tab === 'talk') { $('#tPresenter').value = S.cfg.presenter || ''; $('#tEvent').value = (S.talk && S.talk.event) || ''; $('#tAiBar').hidden = !AI.fn; renderTalk(); }
-  if (S.sel.tab === 'extracted') renderExtracted();
-  if (S.sel.tab === 'kit') renderKit();
-  renderInspector();
-});
+// ---------- modes and steps ----------
+// mode = what the user is making (social | poster | talk); step = 1 Content, 2 Look, 3 Download
+const MODE_TAB = { social: 'carousel', poster: 'poster', talk: 'talk' };
+const MODE_NAME = { social: 'Social post', poster: 'Poster', talk: 'Presentation' };
+const UIKEY = 'paper2poster-ui';
+const ui = { mode: null, step: 1 };
+try { const u = JSON.parse(localStorage.getItem(UIKEY) || 'null'); if (u && MODE_TAB[u.mode]) ui.mode = u.mode; } catch (e) {}
+const saveUi = () => { try { localStorage.setItem(UIKEY, JSON.stringify({ mode: ui.mode })); } catch (e) {} };
+function showHome() {
+  ui.home = true; openSheet(null);
+  $('#homePaper').textContent = (S.model && S.model.title) ? S.model.title : 'your paper';
+  document.querySelectorAll('.pick-mode').forEach(c => c.setAttribute('aria-current', String(c.dataset.mode === ui.mode)));
+  applyView();
+}
+function setMode(m, step = 1) {
+  if (!MODE_TAB[m]) return;
+  ui.mode = m; ui.home = false; ui.step = step; saveUi();
+  S.sel.tab = MODE_TAB[m];
+  applyView();
+}
+function setStep(n) { if (!ui.mode) return showHome(); ui.home = false; ui.step = Math.max(1, Math.min(3, n)); applyView(); window.scrollTo && window.scrollTo(0, 0); }
+function applyView() {
+  const home = ui.home || !ui.mode, step = ui.step, tab = S.sel.tab;
+  document.body.classList.toggle('home', home);
+  ['step-1', 'step-2', 'step-3'].forEach(c => document.body.classList.toggle(c, !home && c === 'step-' + step));
+  document.querySelectorAll('.mode').forEach(x => x.setAttribute('aria-selected', String(!home && x.dataset.mode === ui.mode)));
+  document.querySelectorAll('#steps [data-step]').forEach(x => { if (+x.dataset.step === step && !home) x.setAttribute('aria-current', 'step'); else x.removeAttribute('aria-current'); });
+  $('#vHome').hidden = !home;
+  $('#vDownload').hidden = home || step !== 3;
+  const showPreview = !home && step !== 3;
+  $('#vCarousel').hidden = !(showPreview && tab === 'carousel'); $('#vPoster').hidden = !(showPreview && tab === 'poster'); $('#vTalk').hidden = !(showPreview && tab === 'talk');
+  $('#lookPoster').hidden = ui.mode !== 'poster'; $('#lookTalk').hidden = ui.mode !== 'talk';
+  // the talk toolbar's extras only matter while editing content
+  document.querySelectorAll('#vTalk .tbar, #tTime, #tHint, #tAiBar').forEach(x => { x.style.display = step === 1 ? '' : 'none'; });
+  $('#vTalk .tscript').style.display = step === 1 ? '' : 'none';
+  $('#aiBar').style.display = step === 1 ? '' : 'none'; $('#aiBarOut').style.display = step === 1 ? '' : 'none';
+  $('#fabEdit').textContent = tab === 'poster' ? 'Edit poster' : 'Edit slide';
+  $('#fabEdit').hidden = home || step !== 1; $('#fabLook').hidden = home || step !== 2;
+  $('#stepBack').textContent = step === 1 ? 'Back to start' : step === 2 ? 'Back: Content' : 'Back: Look';
+  $('#stepNext').textContent = step === 1 ? 'Next: Look' : step === 2 ? 'Next: Download' : 'Done';
+  $('#stepNext').hidden = step === 3;
+  if (!home && tab === 'talk') { $('#tAiBar').hidden = !AI.fn || step !== 1; renderTalk(); }
+  if (!home && step === 3) renderDownloads();
+  if (!home) renderInspector();
+  updateFactBadge();
+}
+document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode, ui.mode === b.dataset.mode ? ui.step : Math.min(ui.step, 2))));
+document.querySelectorAll('.pick-mode').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode, 1)));
+document.querySelectorAll('#steps [data-step]').forEach(b => b.addEventListener('click', () => setStep(+b.dataset.step)));
+$('#stepBack').addEventListener('click', () => ui.step === 1 ? showHome() : setStep(ui.step - 1));
+$('#stepNext').addEventListener('click', () => setStep(ui.step + 1));
+$('#homeBtn').addEventListener('click', showHome);
+$('#dlBtn').addEventListener('click', () => ui.mode ? setStep(3) : showHome());
+// downloads that fit what you are making
+const DLS = {
+  social: [['zip', 'Carousel images', 'PNG slides in a ZIP, 1080 × 1350. Post them as an Instagram carousel.', true], ['video45', 'Carousel video', 'Animated MP4 for the feed, 4:5'], ['video916', 'Reel or Story video', 'Animated MP4, 9:16'], ['lipdf', 'LinkedIn carousel', 'PDF for a LinkedIn document post'], ['ga', 'Graphical abstract', 'PNG, 1600 × 900, for journals and slides'], ['share', 'Share to an app', 'Copy the caption and save the right file for Instagram, TikTok, LinkedIn, X or WhatsApp']],
+  poster: [['poster', 'Poster for printing', 'PDF at 150 dpi, at full poster size', true], ['posterpng', 'Poster image', 'PNG preview to share or check']],
+  talk: [['rehearse', 'Rehearse first', 'Full-screen practice with your script and a timer', false], ['pptx', 'PowerPoint', 'Editable slides with your script in the speaker notes', true], ['talkpdf', 'Slides PDF', '16:9, opens anywhere'], ['script', 'Speaker script', 'Printable PDF with timings'], ['pptxtheme', 'PowerPoint with theme fonts', "Uses the theme's Google fonts. Install them first."], ['scriptmd', 'Script as text', 'A .md file you can edit anywhere']],
+};
+function renderDownloads() {
+  const m = ui.mode || 'social';
+  $('#dlTitle').textContent = `Download your ${MODE_NAME[m].toLowerCase()}`;
+  $('#dlList').innerHTML = (m === 'social' ? prepubWarn() : '') + DLS[m].map(([x, t, d, main]) => `<button class="dli${main ? ' main' : ''}" type="button" data-dl="${x}"><strong>${esc(t)}</strong><span>${esc(d)}</span></button>`).join('');
+  $('#dlList').querySelectorAll('[data-dl]').forEach(b => b.addEventListener('click', () => runExport(b.dataset.dl)));
+  $('#dlSocial').hidden = m !== 'social';
+  if (m === 'social') renderKit();
+}
+// settings drawer
+function openSettings(where) {
+  $('#tPresenter').value = S.cfg.presenter || ''; $('#tEvent').value = (S.talk && S.talk.event) || '';
+  $('#setDrawer').hidden = false; $('#setBg').hidden = false;
+  const h = where && $('#set-' + where); if (h && h.scrollIntoView) h.scrollIntoView({ block: 'start' });
+  $('#setClose').focus();
+}
+function closeSettings() { $('#setDrawer').hidden = true; $('#setBg').hidden = true; }
+$('#setBtn').addEventListener('click', () => openSettings());
+$('#setClose').addEventListener('click', closeSettings);
+$('#setBg').addEventListener('click', closeSettings);
+document.addEventListener('click', e => { const b = e.target.closest('[data-open-set]'); if (b) openSettings(b.dataset.openSet); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#setDrawer').hidden) closeSettings(); });
+// fact check badge and panel
+let fcT = 0;
+function updateFactBadge() {
+  clearTimeout(fcT);
+  fcT = setTimeout(() => {
+    const b = $('#fcBadge'); if (!b || !S.model || !ui.mode) return;
+    try {
+      if (ui.mode === 'talk') ensureTalk();
+      const items = ui.mode === 'social' ? carouselClaims() : ui.mode === 'poster' ? posterClaims() : talkClaims(visibleTalk());
+      const res = P2P.factCheck(S.model, items), bad = res.filter(r => r.status === 'number' || r.status === 'none').length, ph = res.filter(r => r.status === 'placeholder').length;
+      b.className = 'fcb ' + (bad || ph ? 'warn' : 'ok');
+      b.textContent = bad ? `! ${bad} to check` : ph ? `[ ] ${ph} to fill in` : '✓ All matched';
+      b.title = 'Fact check: every claim traced to the paper. Click for details.';
+    } catch (e) { b.className = 'fcb'; b.textContent = 'Fact check'; }
+  }, 500);
+}
+function openCheck() { S.fcWhich = { social: 'carousel', poster: 'poster', talk: 'talk' }[ui.mode] || 'talk'; renderExtracted(); $('#checkModal').hidden = false; $('#checkClose').focus(); }
+function closeCheck() { $('#checkModal').hidden = true; }
+$('#fcBadge').addEventListener('click', openCheck);
+$('#checkClose').addEventListener('click', closeCheck);
+$('#checkModal').addEventListener('click', e => { if (e.target.id === 'checkModal') closeCheck(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#checkModal').hidden) closeCheck(); });
+// tuck rarely used editor fields under "More options"
+function tuck(el, ids) {
+  const sec = el.querySelector('.sec'); if (!sec) return;
+  const nodes = [];
+  ids.forEach(q => el.querySelectorAll(q).forEach(n => { let w = n; while (w.parentElement && w.parentElement !== sec) w = w.parentElement; if (w.parentElement === sec && !nodes.includes(w)) nodes.push(w); }));
+  if (!nodes.length) return;
+  const d = document.createElement('details'); d.className = 'more'; d.open = !!S.moreOpen;
+  d.innerHTML = '<summary>More options</summary><div class="more-b"></div>';
+  d.addEventListener('toggle', () => { S.moreOpen = d.open; });
+  const box = d.querySelector('.more-b');
+  nodes.forEach(n => box.append(n));
+  sec.append(d);
+}
 $('#pSize').innerHTML = Object.entries(R.POSTER_SIZES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
 $('#pSize').addEventListener('change', e => { S.posterSize = e.target.value; scheduleRender(); commit(true); });
 $('#pLayout').addEventListener('change', e => { ensureBillboard(); S.poster.layout = e.target.value; renderInspector(); scheduleRender(); commit(true); });
@@ -704,6 +809,7 @@ async function finishPdf(doc, ex, meta, name) {
   else if (model.figurePages.length) toast(`Read ${ex.pagesRead} pages. Figures found on page ${model.figurePages.slice(0, 4).join(', ')}. Use "Crop from PDF" to add them.`, 4200);
   else toast(`Read ${ex.pagesRead} pages`);
   renderAll(true); commit(true);
+  showHome();
 }
 $('#pdfInput').addEventListener('change', e => { handlePdf(e.target.files[0]); e.target.value = ''; });
 let dragN = 0;
@@ -840,7 +946,7 @@ function aiCopy(code) {
   return ({ rate_limited: 'You have reached your Claude usage limit for now. Try again later.', session_expired: 'Sign in to Claude again, then try again.', refused: 'Claude could not help with this text. Edit it a little and try again.', prompt_too_large: 'This paper is too long to send in one go.', invalid_json: 'Claude\'s answer came back in the wrong shape. Try again.', empty_completion: 'Claude returned nothing. Try again.', not_granted: 'Claude was not allowed for this page, so the Claude buttons are hidden. Everything else still works.', sampling_disabled: 'Claude is not available for this account.' })[code] || 'Could not reach Claude. Try again.';
 }
 const AI_OFF = ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'];
-function aiDisable(code) { AI.fn = null; toast(aiCopy(code), 4500); renderInspector(); renderAiBar(); if (S.sel.tab === 'extracted') renderExtracted(); }
+function aiDisable(code) { AI.fn = null; toast(aiCopy(code), 4500); renderInspector(); renderAiBar(); if (!$('#checkModal').hidden) renderExtracted(); }
 function paperContext(max = 24000) {
   const m = S.model;
   let out = `TITLE: ${m.title}\nAUTHORS: ${(m.authors || []).join(', ')}\n${m.journal || m.year ? `PUBLISHED: ${[m.journal, m.year].filter(Boolean).join(', ')}\n` : ''}${m.doi ? `DOI: ${m.doi}\n` : ''}`;
@@ -1047,7 +1153,7 @@ function wireAiPaper() {
 
 (async () => {
   try { AI.fn = window.claude && window.claude.use ? await window.claude.use('sample') : null; } catch (e) { AI.fn = null; }
-  if (AI.fn) { renderAiBar(); renderInspector(); if (S.sel.tab === 'extracted') renderExtracted(); }
+  if (AI.fn) { renderAiBar(); renderInspector(); if (!$('#checkModal').hidden) renderExtracted(); }
 })();
 
 // ---------- animation preview & video ----------
@@ -1315,11 +1421,11 @@ function closeMenu() { menu.hidden = true; exBtn.setAttribute('aria-expanded', '
 exBtn.addEventListener('click', e => { e.stopPropagation(); const open = menu.hidden; menu.hidden = !open; exBtn.setAttribute('aria-expanded', String(open)); if (open) menu.querySelector('button').focus(); });
 document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { closeMenu(); exBtn.focus(); } });
-menu.addEventListener('click', async e => {
-  const b = e.target.closest('[data-x]'); if (!b) return;
-  closeMenu();
-  const x = b.dataset.x;
-  if (x === 'zip') $('#exportCar').click();
+menu.addEventListener('click', e => { const b = e.target.closest('[data-x]'); if (!b) return; closeMenu(); runExport(b.dataset.x); });
+function runExport(x) {
+  if (x === 'share') openShare();
+  else if (x === 'rehearse') { renderTalk(); openRehearse(); }
+  else if (x === 'zip') $('#exportCar').click();
   else if (x === 'video45') { videoStory = false; $('#exportVideo').click(); }
   else if (x === 'video916') { videoStory = true; $('#exportVideo').click(); }
   else if (x === 'poster') $('#exportPoster').click();
@@ -1331,7 +1437,7 @@ menu.addEventListener('click', async e => {
   else if (x === 'talkpdf') exportTalkPdf();
   else if (x === 'script') exportScript();
   else if (x === 'scriptmd') exportScriptText();
-});
+}
 async function exportLinkedIn() {
   notice('<span class="busy"><span class="spin"></span> Building the LinkedIn PDF…</span>');
   try {
@@ -1544,6 +1650,8 @@ function renderTalkInspector(el) {
   h += factBox(talkClaims([s]));
   h += `<div class="row"><button class="btn sm ghost" id="kUp" ${S.sel.talk === 0 ? 'disabled' : ''}>Move earlier</button><button class="btn sm ghost" id="kDown" ${S.sel.talk === S.talk.slides.length - 1 ? 'disabled' : ''}>Move later</button><button class="btn sm ghost" id="kAdd">Add a slide after</button>${s.added ? '<button class="btn sm ghost" id="kDel">Delete</button>' : ''}</div></div>`;
   el.innerHTML = h;
+  tuck(el, [...(s.optional && s.hidden ? [] : ['#kShow']), '#kIcon', '#kCtx', '#kChart', '#kFig', 'details.fc', '#kUp']);
+  { const sec = el.querySelector('.sec'), d = el.querySelector('details.more'); if (sec && d) [...sec.children].filter(x => x.matches('p.hint') && /Gives the number its context|Add a figure from/.test(x.textContent)).forEach(x => d.querySelector('.more-b').append(x)); }
   const on = (id, ev, fn) => { const x = $('#' + id); if (x) x.addEventListener(ev, fn); };
   const changed = () => { S.talk.edited = true; renderTalk(); commit(); };
   const lines = v => v.split('\n').map(x => x.trim()).filter(Boolean);
@@ -1714,7 +1822,7 @@ $('#tScript').addEventListener('click', exportScript);
 // ---------- mobile sheets and swipe ----------
 function openSheet(which) { document.body.classList.remove('sheet-insp', 'sheet-left'); if (which) document.body.classList.add('sheet-' + which); }
 $('#fabEdit').addEventListener('click', () => openSheet('insp'));
-$('#openLeft').addEventListener('click', () => openSheet('left'));
+$('#fabLook').addEventListener('click', () => openSheet('left'));
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => openSheet(null)));
 (() => {
   const big = $('#bigSlide'); let x0 = null, y0 = 0;
@@ -1811,6 +1919,7 @@ $('#undoBtn').addEventListener('click', undo); $('#redoBtn').addEventListener('c
   } else {
     await loadExample();
   }
+  if (ui.mode && !(S.source && S.source.example)) setMode(ui.mode, 1); else showHome();
   await fontsReady(theme());
   scheduleRender();
   document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => scheduleRender());

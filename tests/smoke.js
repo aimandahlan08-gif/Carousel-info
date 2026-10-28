@@ -15,17 +15,18 @@ w.HTMLCanvasElement.prototype.getContext = function () { if (!this._c || this._c
 w.HTMLCanvasElement.prototype.toDataURL = function (t) { this.getContext('2d'); return this._c.toDataURL(t === 'image/jpeg' ? 'image/jpeg' : 'image/png'); };
 w.HTMLCanvasElement.prototype.toBlob = function (cb) { this.getContext('2d'); cb(new w.Blob([this._c.toBuffer('image/png')], { type: 'image/png' })); };
 w.HTMLImageElement.prototype.decode = async function () { const im = new napi.Image(); im.src = Buffer.from(this.src.split(',')[1], 'base64'); this._napi = im; Object.defineProperty(this, 'width', { value: im.width, configurable: true }); Object.defineProperty(this, 'height', { value: im.height, configurable: true }); };
-w.Element.prototype.scrollIntoView = function () {};
+w.Element.prototype.scrollIntoView = function () {}; w.scrollTo = () => {};
 const js = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
 try { w.eval(js.join('\n;\n')); } catch (e) { errors.push('eval: ' + e.stack); }
 const $ = s => w.document.querySelector(s);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const go = async t => { if (t === 'extracted') { $('#fcBadge').click(); await sleep(50); return; } if (!$('#checkModal').hidden) $('#checkClose').click(); const m = { carousel: ['social', 1], poster: ['poster', 1], talk: ['talk', 1], kit: ['social', 3] }[t]; $(`.mode[data-mode="${m[0]}"]`).click(); await sleep(30); $(`#steps [data-step="${m[1]}"]`).click(); await sleep(30); };
 (async () => {
   await sleep(1500);
   const report = () => console.log('slides:', $('#strip').children.length, '| notice:', ($('#notice').textContent || '').slice(0, 70), '| inspector:', ($('#insp .insp-h .t') || {}).textContent);
   report(); if (errors.length) { console.log(errors.slice(0,5).join(' || ')); process.exit(1); }
   // click through every tab and every slide
-  for (const t of ['poster', 'kit', 'extracted', 'carousel']) { $(`.tab[data-tab="${t}"]`).click(); await sleep(150); }
+  for (const t of ['poster', 'kit', 'extracted', 'carousel']) { await go(t); await sleep(150); }
   const thumbs = [...$('#strip').children];
   for (const b of thumbs) { b.click(); await sleep(30); }
   console.log('kit caption length:', ($('#kit-caption') || {}).value?.length, '| alt lines:', ($('#kit-alt') || {}).value?.split('\n\n').length, '| thread posts:', ($('#kit-thread') || {}).value?.split('\n\n').length);
@@ -50,18 +51,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   $('#exportMenu [data-x="ga"]').click(); await sleep(300);
   console.log('toast:', $('#toast').textContent);
   // poster tab + click a block
-  $('.tab[data-tab="poster"]').click(); await sleep(100);
+  await go('poster'); await sleep(100);
   console.log('poster blocks in inspector:', w.document.querySelectorAll('.blk').length, '| poster meta:', $('#pMeta').textContent);
   await sleep(300);
   console.log('POSTER WARN:', $('#warns') && $('#warns').textContent);
-  $('.tab[data-tab="kit"]').click(); await sleep(100);
+  await go('kit'); await sleep(100);
   console.log('CAPTION:\n' + $('#kit-caption').value);
   console.log('THREAD:\n' + $('#kit-thread').value.split('\n\n').slice(0, 3).join('\n'));
   $('#shareBtn').click(); await sleep(50);
   console.log('share cards:', w.document.querySelectorAll('.shc').length, '| X link:', decodeURIComponent(w.document.querySelectorAll('.shc a')[4].href).slice(0, 140));
   w.document.querySelectorAll('.shc [data-sh]')[7].click(); await sleep(300);
   console.log('after WhatsApp tap -> modal hidden:', $('#shareModal').hidden, '| toast:', $('#toast').textContent);
-  $('.tab[data-tab="poster"]').click(); await sleep(150);
+  await go('poster'); await sleep(150);
   console.log('STORY layout:', $('#pLayout').value, '| size:', $('#pSize').value, '| blocks:', [...w.document.querySelectorAll('.blk')].map(b => b.dataset.b).join(','), '| meta:', $('#pMeta').textContent);
   const tk = $('textarea[data-s="take"]'); tk.value = 'Cycling to campus goes with *lower loneliness*.'; tk.dispatchEvent(new w.Event('input'));
   const cs = $('select[data-col="why"]'); cs.value = '1'; cs.dispatchEvent(new w.Event('change'));

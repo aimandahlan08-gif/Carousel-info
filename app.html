@@ -46,8 +46,57 @@ button { cursor: pointer; }
 .notice { display: flex; gap: 10px; align-items: center; padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--warn-soft); color: var(--ink); border-bottom: 1px solid var(--line); font-size: 13px; flex-wrap: wrap; }
 .notice.err { background: color-mix(in srgb, var(--bad) 14%, var(--panel)); }
 .notice strong { font-weight: 700; }
+/* modes and steps */
+.mark { border: 0; background: none; padding: 0; cursor: pointer; color: var(--ink); }
+.modebar { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+.modes { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+.mode { border: 0; background: none; padding: 7px 14px; border-radius: 8px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.mode[aria-selected=true] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+.mode .ct { font: 500 11px var(--mono); color: var(--muted); margin-left: 6px; }
+.steps { display: inline-flex; list-style: none; margin: 0; padding: 0; gap: 4px; align-items: center; }
+.steps li + li::before { content: ''; display: inline-block; width: 18px; height: 1.5px; background: var(--line); vertical-align: middle; margin-right: 4px; }
+.steps button { border: 0; background: none; display: inline-flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 8px; font-weight: 600; color: var(--muted); }
+.steps button b { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line); font: 600 12px var(--mono); }
+.steps button[aria-current=step] { color: var(--ink); }
+.steps button[aria-current=step] b { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.fcb { margin-left: auto; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; font: 600 12px var(--ui); display: inline-flex; gap: 6px; align-items: center; }
+.fcb.ok { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }
+.fcb.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: var(--warn-soft); }
+body.home .modebar .steps, body.home .modebar .fcb, body.home .stepnav { display: none; }
+.homev { max-width: 860px; margin: 4vh auto 0; display: grid; gap: 18px; text-align: center; }
+.homev h1 { margin: 0; font: 700 30px/1.15 var(--mark); }
+.homev .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.homev .card { display: grid; gap: 8px; justify-items: center; padding: 26px 18px; cursor: pointer; font: inherit; color: inherit; transition: border-color .15s, transform .15s; }
+.homev .card:hover, .homev .card:focus-visible { border-color: var(--accent); transform: translateY(-2px); }
+.homev .card[aria-current=true] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.homev .card .ic { width: 54px; height: 54px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+.homev .card .ic svg { width: 28px; height: 28px; }
+.homev .card strong { font-size: 17px; }
+.homev .card span:last-child { font-size: 13px; color: var(--muted); }
+.home-up { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.stepnav { display: flex; gap: 10px; max-width: 1040px; margin: 22px auto 0; }
+.dl { max-width: 860px; margin: 0 auto; display: grid; gap: 16px; }
+.dl h2 { margin: 0; font: 700 20px var(--mark); }
+.dlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.dli { display: grid; gap: 4px; text-align: left; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: pointer; font: inherit; color: inherit; }
+.dli:hover, .dli:focus-visible { border-color: var(--accent); }
+.dli strong { font-size: 15px; } .dli span { font-size: 12.5px; color: var(--muted); }
+.dli.main { border-color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 50%, var(--panel)); }
+#dlSocial { display: grid; gap: 12px; }
+details.more { border-top: 1px dashed var(--line); padding-top: 8px; }
+details.more > summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--accent); padding: 4px 0; }
+details.more .more-b { display: grid; gap: 10px; padding-top: 8px; }
+/* settings drawer */
+.drawer-bg { position: fixed; inset: 0; background: rgba(8, 12, 10, .45); z-index: 54; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(400px, 100%); background: var(--panel); border-left: 1px solid var(--line); z-index: 55; display: grid; grid-template-rows: auto 1fr; box-shadow: -18px 0 40px -18px rgba(0,0,0,.4); }
+.drawer header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); padding-top: max(14px, env(safe-area-inset-top, 0px)); }
+.drawer .dbody { overflow-y: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
 /* workspace */
 .ws { display: grid; grid-template-columns: 290px minmax(0, 1fr) 340px; min-height: 0; flex: 1; }
+body.step-1 .ws { grid-template-columns: minmax(0, 1fr) 360px; } body.step-1 .rail.left { display: none; }
+body.step-2 .ws { grid-template-columns: 300px minmax(0, 1fr); } body.step-2 .rail.right { display: none; }
+body.step-3 .ws, body.home .ws { grid-template-columns: minmax(0, 1fr); } body.step-3 .rail, body.home .rail { display: none; }
+body.step-2 .fab#fabEdit, body.step-3 .fab, body.home .fab { display: none !important; }
 .rail { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; min-width: 0; }
 .rail.right { border-right: 0; border-left: 1px solid var(--line); }
 .sec { padding: 16px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
@@ -87,7 +136,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
 .stage { overflow: auto; min-height: 0; background-color: var(--bg); background-image: radial-gradient(var(--dot) 1.1px, transparent 1.2px); background-size: 18px 18px; padding: 22px; }
 [hidden] { display: none !important; }
 .view[hidden] { display: none !important; }
-.car { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 22px; align-items: start; }
+.car { display: grid; grid-template-columns: minmax(0, 430px) minmax(0, 1fr); gap: 22px; align-items: start; }
 .big { width: min(430px, 100%); aspect-ratio: 4 / 5; max-width: 100%; display: block; box-shadow: 0 18px 40px -18px rgba(10, 20, 15, .45), 0 2px 6px rgba(10,20,15,.12); border-radius: 4px; background: #fff; }
 .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 14px; align-content: start; }
 .thumb { display: grid; gap: 6px; padding: 0; border: 0; background: none; text-align: left; position: relative; }
@@ -221,9 +270,10 @@ details.src p { margin: 6px 0 0; }
 .spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: sp .8s linear infinite; }
 @keyframes sp { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } .rail.left, .rail.right { transition: none; } }
-@media (max-width: 1180px) { .ws { grid-template-columns: 260px minmax(0, 1fr); } .rail.right { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); } .ws { overflow-y: auto; } }
+@media (max-width: 1180px) and (min-width: 761px) { body.step-1 .ws { grid-template-columns: minmax(0, 1fr) 320px; } body.step-2 .ws { grid-template-columns: 260px minmax(0, 1fr); } }
 @media (max-width: 760px) {
   .mob-only { display: inline-flex !important; }
+  .mob-only[hidden] { display: none !important; }
   .sheet-h.mob-only { display: flex !important; }
   .rail.left, .rail.right { position: fixed !important; left: 0; right: 0; bottom: 0; max-height: 80vh; z-index: 45; transform: translateY(105%); transition: transform .25s ease; border-radius: 16px 16px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,.35); padding-bottom: env(safe-area-inset-bottom, 0px); border: 1px solid var(--line); }
   body.sheet-insp .rail.right, body.sheet-left .rail.left { transform: none; }
@@ -241,12 +291,22 @@ details.src p { margin: 6px 0 0; }
   .strip { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
   .tabs { padding-left: max(16px, env(safe-area-inset-left, 0px)); }
   .file { max-width: 100%; order: 5; flex-basis: 100%; }
+  .hide-s { display: none; }
+  .modebar { padding: 10px 12px; gap: 10px; }
+  .modes { width: 100%; } .mode { flex: 1; padding: 8px 6px; font-size: 13px; } .mode .ct { display: none; }
+  .steps { flex: 1; } .steps button { padding: 4px; font-size: 13px; } .steps li + li::before { width: 8px; }
+  .fcb { margin-left: 0; }
+  .homev .cards { grid-template-columns: 1fr; } .homev .card { grid-template-columns: auto 1fr; justify-items: start; text-align: left; padding: 14px; column-gap: 14px; } .homev .card .ic { grid-row: span 2; }
+  .homev h1 { font-size: 24px; }
+  .stepnav { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px)); margin-top: 12px; z-index: 30; }
+  body.step-1 .fab, body.step-2 .fab { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  body.step-1 .rail.left { display: block; } body.step-2 .rail.left { display: block; }
 }
 </style>
 
 <div class="app" id="app">
   <header class="bar">
-    <div class="mark">Paper<b>2</b>Poster</div>
+    <button class="mark" type="button" id="homeBtn" title="Start screen">Paper<b>2</b>Poster</button>
     <div class="file" id="fileChip" title=""><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg><span id="fileName">Example paper</span></div>
     <div class="spacer"></div>
     <div class="group">
@@ -255,8 +315,10 @@ details.src p { margin: 6px 0 0; }
     </div>
     <label class="btn" for="pdfInput"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>Upload PDF</label>
     <input type="file" id="pdfInput" accept="application/pdf,.pdf" hidden>
-    <button class="btn" id="shareBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4"/><path d="m15.4 6.5-6.8 4"/></svg>Share</button>
-    <div class="exp">
+    <button class="btn" id="setBtn" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="hide-s">Settings</span></button>
+    <button class="btn primary" id="dlBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Download</button>
+    <button class="btn" id="shareBtn" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4"/><path d="m15.4 6.5-6.8 4"/></svg>Share</button>
+    <div class="exp" hidden>
       <button class="btn primary" id="exportBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="exportMenu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Export</button>
       <div class="menu" id="exportMenu" role="menu" hidden>
         <div class="mh">Instagram and TikTok</div>
@@ -283,62 +345,60 @@ details.src p { margin: 6px 0 0; }
   </header>
   <div id="notice" class="notice" hidden></div>
   <div class="ws">
-    <aside class="rail left" id="leftWrap" aria-label="Paper and style"><div class="sheet-h mob-only"><strong>Paper and style</strong><button class="btn sm" type="button" data-close>Done</button></div>
-      <section class="sec">
-        <h2>Paper</h2>
-        <label class="f">Title<textarea id="mTitle" rows="3"></textarea></label>
-        <label class="f">Authors (comma separated)<input type="text" id="mAuthors"></label>
-        <label class="f">Affiliations (one per line)<textarea id="mAff" rows="2"></textarea></label>
-        <div class="row" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:8px">
-          <label class="f">Journal<input type="text" id="mJournal"></label>
-          <label class="f">Year<input type="text" id="mYear" inputmode="numeric"></label>
-        </div>
-        <label class="f">DOI<input type="text" id="mDoi" placeholder="10.xxxx/…" spellcheck="false"></label>
-        <label class="f">Keywords (comma separated)<input type="text" id="mKw"></label>
-      </section>
-      <section class="sec">
-        <h2>Brand and audience</h2>
-        <label class="f">Your handle<input type="text" id="mHandle" placeholder="@yourhandle" autocomplete="off" spellcheck="false"></label>
-        <label class="f">Series name<input type="text" id="bSeries" placeholder="Paper of the Week #1"></label>
-        <div class="row"><div class="avprev" id="bAvPrev" aria-hidden="true"></div><label class="btn sm" for="bAvatar">Profile photo</label><input type="file" id="bAvatar" accept="image/*" hidden><button class="btn sm ghost" type="button" id="bAvDel" hidden>Remove</button></div>
-        <div class="row"><div class="avprev lg" id="bLogoPrev" aria-hidden="true"></div><label class="btn sm" for="bLogo">University or lab logo</label><input type="file" id="bLogo" accept="image/*" hidden><button class="btn sm ghost" type="button" id="bLogoDel" hidden>Remove</button></div>
-        <div class="row"><label class="f" style="display:flex;flex-direction:row;align-items:center;gap:8px">Brand colour<input type="color" id="bColor" value="#0A6A94" style="width:46px;height:30px;padding:2px"></label><button class="btn sm ghost" type="button" id="bColorReset" hidden>Use theme colour</button></div>
-        <p class="hint" id="bColorHint" hidden></p>
-        <label class="f">Who is it for?<select id="cAud"><option value="students">Students</option><option value="clinicians">Doctors and clinicians</option><option value="researchers">Researchers</option><option value="public">General public</option></select></label>
-        <div class="seg" role="radiogroup" aria-label="Whose paper is it?"><label><input type="radio" name="voice" value="share" id="vShare" checked> Sharing someone's paper</label><label><input type="radio" name="voice" value="author" id="vAuthor"> I'm an author</label></div>
-        <p class="hint">Your handle, series and photo appear on the cover and the last slide, and are kept for your next paper. Audience and voice change the headlines and wording.</p>
-      </section>
-      <section class="sec">
-        <h2>Theme</h2>
+    <aside class="rail left" id="leftWrap" aria-label="Look"><div class="sheet-h mob-only"><strong>Look</strong><button class="btn sm" type="button" data-close>Done</button></div>
+<section class="sec">
+        <h2>Theme</h2><p class="hint" style="margin:0">Used by the carousel, poster and slides.</p>
         <div class="themes" id="themes"></div>
       </section>
-      <section class="sec">
-        <h2>Figures <span id="figCount"></span></h2>
-        <div class="figs" id="figs"></div>
-        <div class="row">
-          <button class="btn sm" id="cropBtn">Crop from PDF</button>
-          <label class="btn sm" for="imgInput">Add image</label>
-          <input type="file" id="imgInput" accept="image/*" hidden>
-        </div>
-        <p class="hint" id="figHint"></p>
+      <section class="sec" id="lookPoster">
+        <h2>Poster</h2>
+        <label class="f">Layout<select id="pLayout"><option value="story">Story (numbered sections)</option><option value="billboard">Billboard (one big message)</option><option value="classic">Classic</option></select></label>
+        <label class="f">Size<select id="pSize"></select></label>
+      </section>
+      <section class="sec" id="lookTalk">
+        <h2>Slides</h2>
+        <label class="f">Style<select id="tStyle"><option value="classic">Classic</option><option value="bold">Bold header</option><option value="minimal">Minimal</option></select></label>
       </section>
       <section class="sec">
-        <h2>Start over</h2>
-        <p class="hint">Rebuild the slides and poster from the paper. Your edits will be replaced.</p>
-        <div class="row" id="rebuildRow"><button class="btn sm" id="rebuildBtn">Rebuild from paper</button></div>
-        <div class="row"><button class="btn sm ghost" id="exampleBtn">Load the example paper</button></div>
+        <h2>Your colour and logo</h2>
+        <p class="hint" style="margin:0">Set your brand colour, logo and handle once in Settings. They apply to everything.</p>
+        <div class="row"><button class="btn sm" type="button" data-open-set="brand">Open settings</button></div>
       </section>
     </aside>
     <main class="main">
-      <div class="tabs" role="tablist">
-        <button class="tab" role="tab" data-tab="carousel" aria-selected="true">Carousel <span class="ct" id="ctCar"></span></button>
-        <button class="tab" role="tab" data-tab="poster" aria-selected="false">Poster <span class="ct" id="ctPos"></span></button>
-        <button class="tab" role="tab" data-tab="talk" aria-selected="false">Talk <span class="ct" id="ctTalk"></span></button>
-        <button class="tab" role="tab" data-tab="kit" aria-selected="false">Post kit</button>
-        <button class="tab" role="tab" data-tab="extracted" aria-selected="false">What the app found</button>
-        <button class="btn sm mob-only" type="button" id="openLeft" style="margin-left:auto;align-self:center">Paper and style</button>
+      <div class="modebar" id="modeBar">
+        <div class="modes" role="tablist" aria-label="What are you making?">
+          <button class="mode" role="tab" data-mode="social" aria-selected="false">Social post<span class="ct" id="ctCar"></span></button>
+          <button class="mode" role="tab" data-mode="poster" aria-selected="false">Poster<span class="ct" id="ctPos"></span></button>
+          <button class="mode" role="tab" data-mode="talk" aria-selected="false">Presentation<span class="ct" id="ctTalk"></span></button>
+        </div>
+        <ol class="steps" id="steps">
+          <li><button type="button" data-step="1"><b>1</b>Content</button></li>
+          <li><button type="button" data-step="2"><b>2</b>Look</button></li>
+          <li><button type="button" data-step="3"><b>3</b>Download</button></li>
+        </ol>
+        <button class="fcb" type="button" id="fcBadge" title="Fact check: every claim traced to the paper">Fact check</button>
       </div>
       <div class="stage">
+        <div class="view" id="vHome" hidden>
+          <div class="homev">
+            <h1>What do you want to make?</h1>
+            <p class="hint" id="homeSub">From <strong id="homePaper">your paper</strong>. You can switch any time.</p>
+            <div class="cards">
+              <button class="card pick-mode" type="button" data-mode="social"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M9 18h6"/></svg></span><strong>Social post</strong><span>Instagram or LinkedIn carousel, video and caption</span></button>
+              <button class="card pick-mode" type="button" data-mode="poster"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M6 8h5M6 11h12M6 14h9"/><path d="M8 22l4-4 4 4"/></svg></span><strong>Poster</strong><span>A conference poster, ready to print</span></button>
+              <button class="card pick-mode" type="button" data-mode="talk"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="12" rx="2"/><path d="M12 15v4M8 21h8"/><path d="m10 7 4 2-4 2z"/></svg></span><strong>Presentation</strong><span>Slides and a timed script: talk, proposal or viva</span></button>
+            </div>
+            <div class="home-up"><label class="btn" for="pdfInput">Upload a different PDF</label><span class="hint">or drop a PDF anywhere on the page</span></div>
+          </div>
+        </div>
+        <div class="view" id="vDownload" hidden>
+          <div class="dl">
+            <h2 id="dlTitle">Download</h2>
+            <div class="dlist" id="dlList"></div>
+            <div id="dlSocial"><h2>Caption and text to post</h2><div class="ex" id="kit"></div></div>
+          </div>
+        </div>
         <div class="view" id="vCarousel">
           <div class="aibar" id="aiBar" hidden><strong><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l2.2 7.3 7.3 2.2-7.3 2.2L12 21.5l-2.2-7.3L2.5 12l7.3-2.2z"/></svg>Ask Claude</strong><button class="btn sm" type="button" id="aiPolish">Polish all slides</button><button class="btn sm" type="button" id="aiCaption">Write the post caption</button><span class="hint">Uses your Claude account. Numbers are checked against the paper.</span></div>
           <div class="ai-out" id="aiBarOut" hidden></div>
@@ -349,13 +409,7 @@ details.src p { margin: 6px 0 0; }
         </div>
         <div class="view" id="vPoster" hidden>
           <div class="posterwrap">
-            <div class="row">
-              <label class="f" style="flex-direction:row;display:flex;align-items:center;gap:8px">Size
-                <select id="pSize" style="width:auto"></select></label>
-              <label class="f" style="flex-direction:row;display:flex;align-items:center;gap:8px">Layout
-                <select id="pLayout" style="width:auto"><option value="story">Story (numbered sections)</option><option value="billboard">Billboard (one big message)</option><option value="classic">Classic</option></select></label>
-              <button class="btn sm" id="posterPng">Save PNG preview</button>
-            </div>
+            <button class="btn sm" id="posterPng" hidden>Save PNG preview</button>
             <canvas id="posterCv" aria-label="Poster preview"></canvas>
             <div class="pmeta" id="pMeta"></div>
           </div>
@@ -365,9 +419,6 @@ details.src p { margin: 6px 0 0; }
             <div class="row tbar">
               <label class="f">Type<select id="tType" style="width:auto"><option value="paper">Conference talk or journal club</option><option value="proposal">Proposal defence</option><option value="thesis">Thesis defence (viva)</option></select></label>
               <label class="f">Length<select id="tMin" style="width:auto"><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option></select></label>
-              <label class="f">Style<select id="tStyle" style="width:auto"><option value="classic">Classic</option><option value="bold">Bold header</option><option value="minimal">Minimal</option></select></label>
-              <label class="f">Presenter<input type="text" id="tPresenter" placeholder="Your name" autocomplete="name"></label>
-              <label class="f">Event<input type="text" id="tEvent" placeholder="Journal club, conference…"></label>
               <span class="chip" id="tEst"></span>
               <div class="spacer"></div>
               <button class="btn sm primary" type="button" id="tRehearse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 4 13 8-13 8z"/></svg>Rehearse</button>
@@ -382,15 +433,15 @@ details.src p { margin: 6px 0 0; }
               <textarea id="tNotes" rows="7" aria-label="Speaker script for this slide"></textarea>
             </div>
             <div class="tstrip strip" id="tStrip"></div>
-            <div class="row"><button class="btn sm" type="button" id="tPptx">PowerPoint with speaker notes</button><button class="btn sm" type="button" id="tPdf">Slides PDF</button><button class="btn sm" type="button" id="tScript">Printable script</button></div>
+            <div class="row" hidden><button class="btn sm" type="button" id="tPptx">PowerPoint with speaker notes</button><button class="btn sm" type="button" id="tPdf">Slides PDF</button><button class="btn sm" type="button" id="tScript">Printable script</button></div>
           </div>
         </div>
-        <div class="view" id="vKit" hidden><div class="ex" id="kit"></div></div>
-        <div class="view" id="vExtracted" hidden><div class="ex" id="ex"></div></div>
+        <div class="stepnav" id="stepNav"><button class="btn" type="button" id="stepBack">Back</button><div class="spacer"></div><button class="btn primary" type="button" id="stepNext">Next</button></div>
       </div>
     </main>
     <aside class="rail right" id="inspWrap" aria-label="Edit"><div class="sheet-h mob-only"><strong>Edit</strong><button class="btn sm" type="button" data-close>Done</button></div><div id="insp"></div></aside>
     <button class="btn primary fab mob-only" type="button" id="fabEdit">Edit slide</button>
+    <button class="btn primary fab mob-only" type="button" id="fabLook" hidden>Look options</button>
   </div>
 </div>
 
@@ -413,6 +464,63 @@ details.src p { margin: 6px 0 0; }
   <div class="body"><canvas class="cur" id="rhCur" width="1920" height="1080" aria-label="Current slide"></canvas><div class="side"><div class="notes" id="rhNotes"></div><div class="nxt"><span id="rhNextLbl"></span><canvas id="rhNextCv" width="960" height="540"></canvas></div></div></div>
   <footer><button class="btn" type="button" id="rhPrev">Previous</button><button class="btn primary" type="button" id="rhNext">Next</button><span class="meta">Arrow keys or space to move · Esc to close</span></footer>
 </div>
+<div class="modal" id="checkModal" hidden role="dialog" aria-modal="true" aria-labelledby="checkTitle">
+  <div class="dlg">
+    <header><strong id="checkTitle">Fact check and what the app found</strong><span class="hint">Every claim traced back to the paper</span><div class="spacer"></div><button class="btn sm" type="button" id="checkClose">Close</button></header>
+    <div class="body"><div class="ex" id="ex"></div></div>
+  </div>
+</div>
+<div class="drawer-bg" id="setBg" hidden></div>
+<aside class="drawer" id="setDrawer" hidden role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <header><strong id="setTitle">Settings</strong><span class="hint">Set once, used everywhere</span><div class="spacer"></div><button class="btn sm" type="button" id="setClose">Done</button></header>
+  <div class="dbody">
+<section class="sec">
+        <h2 id="set-paper">Paper details</h2>
+        <label class="f">Title<textarea id="mTitle" rows="3"></textarea></label>
+        <label class="f">Authors (comma separated)<input type="text" id="mAuthors"></label>
+        <label class="f">Affiliations (one per line)<textarea id="mAff" rows="2"></textarea></label>
+        <div class="row" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:8px">
+          <label class="f">Journal<input type="text" id="mJournal"></label>
+          <label class="f">Year<input type="text" id="mYear" inputmode="numeric"></label>
+        </div>
+        <label class="f">DOI<input type="text" id="mDoi" placeholder="10.xxxx/…" spellcheck="false"></label>
+        <label class="f">Keywords (comma separated)<input type="text" id="mKw"></label>
+      </section>
+<section class="sec">
+        <h2 id="set-figs">Figures <span id="figCount"></span></h2>
+        <div class="figs" id="figs"></div>
+        <div class="row">
+          <button class="btn sm" id="cropBtn">Crop from PDF</button>
+          <label class="btn sm" for="imgInput">Add image</label>
+          <input type="file" id="imgInput" accept="image/*" hidden>
+        </div>
+        <p class="hint" id="figHint"></p>
+      </section>
+<section class="sec">
+        <h2 id="set-brand">Your brand</h2>
+        <label class="f">Your handle<input type="text" id="mHandle" placeholder="@yourhandle" autocomplete="off" spellcheck="false"></label>
+        <label class="f">Series name<input type="text" id="bSeries" placeholder="Paper of the Week #1"></label>
+        <div class="row"><div class="avprev" id="bAvPrev" aria-hidden="true"></div><label class="btn sm" for="bAvatar">Profile photo</label><input type="file" id="bAvatar" accept="image/*" hidden><button class="btn sm ghost" type="button" id="bAvDel" hidden>Remove</button></div>
+        <div class="row"><div class="avprev lg" id="bLogoPrev" aria-hidden="true"></div><label class="btn sm" for="bLogo">University or lab logo</label><input type="file" id="bLogo" accept="image/*" hidden><button class="btn sm ghost" type="button" id="bLogoDel" hidden>Remove</button></div>
+        <div class="row"><label class="f" style="display:flex;flex-direction:row;align-items:center;gap:8px">Brand colour<input type="color" id="bColor" value="#0A6A94" style="width:46px;height:30px;padding:2px"></label><button class="btn sm ghost" type="button" id="bColorReset" hidden>Use theme colour</button></div>
+        <p class="hint" id="bColorHint" hidden></p>
+        <label class="f">Who is it for?<select id="cAud"><option value="students">Students</option><option value="clinicians">Doctors and clinicians</option><option value="researchers">Researchers</option><option value="public">General public</option></select></label>
+        <div class="seg" role="radiogroup" aria-label="Whose paper is it?"><label><input type="radio" name="voice" value="share" id="vShare" checked> Sharing someone's paper</label><label><input type="radio" name="voice" value="author" id="vAuthor"> I'm an author</label></div>
+        <p class="hint">Kept for your next paper. Audience and voice change the headlines and wording.</p>
+      </section>
+      <section class="sec">
+        <h2 id="set-talk">Presenting</h2>
+        <label class="f">Presenter name<input type="text" id="tPresenter" placeholder="Your name" autocomplete="name"></label>
+        <label class="f">Event<input type="text" id="tEvent" placeholder="Journal club, conference…"></label>
+      </section>
+<section class="sec">
+        <h2>Start over</h2>
+        <p class="hint">Rebuild the slides and poster from the paper. Your edits will be replaced.</p>
+        <div class="row" id="rebuildRow"><button class="btn sm" id="rebuildBtn">Rebuild from paper</button></div>
+        <div class="row"><button class="btn sm ghost" id="exampleBtn">Load the example paper</button></div>
+      </section>
+  </div>
+</aside>
 <div class="drop" id="drop" hidden><div>Drop the PDF to read it</div></div>
 <div class="toast" id="toast" hidden role="status"></div>
 

@@ -19,7 +19,7 @@ const loaded = {};
 function loadScript(url) { return loaded[url] ||= new Promise((res, rej) => { const s = document.createElement('script'); s.src = url; s.onload = res; s.onerror = () => { delete loaded[url]; rej(new Error('Could not load ' + url)); }; document.head.appendChild(s); }); }
 
 // ---------- state ----------
-const S = { brand: { series: '', avatar: '' }, cfg: { audience: 'students', author: false }, model: null, slides: [], poster: null, theme: 'academic', posterSize: 'a0l', handle: '', figures: [], sel: { tab: 'carousel', slide: 0, block: 'intro', talk: 0 }, talk: null, source: { name: 'Example paper', example: true, pageCount: 3, pagesRead: 3, twoColPages: 0 } };
+const S = { brand: { series: '', avatar: '' }, cfg: { audience: 'students', author: false }, model: null, slides: [], poster: null, theme: 'sheet', posterSize: 'a0l', handle: '', figures: [], sel: { tab: 'carousel', slide: 0, block: 'intro', talk: 0 }, talk: null, source: { name: 'Example paper', example: true, pageCount: 3, pagesRead: 3, twoColPages: 0 } };
 let pdfDoc = null;
 const imgs = {}; // figure id -> HTMLImageElement or canvas
 const slideCanvases = new Map();
@@ -137,6 +137,7 @@ function colorHint() {
 }
 const visibleSlides = () => S.slides.filter(s => !s.hidden);
 function figImg(id) { return id ? imgs[id] : null; }
+function sheetStats() { if (S.poster && !S.poster.sheet && S.model) S.poster.sheet = P2P.buildSheet(S.model); return (S.poster && S.poster.sheet && S.poster.sheet.stats) || []; }
 function footerText() { return P2P.shortCite(S.model); }
 let avatarImg = null;
 const brandCtx = () => ({ handle: (S.handle || '').trim(), series: (S.brand.series || '').trim(), avatar: avatarImg });
@@ -185,7 +186,7 @@ function renderCanvases() {
   const T = theme();
   const vis = visibleSlides();
   slideWarn = {};
-  const ctxBase = { footer: footerText(), keywords: S.model.keywords, meta: metaOf(S.model), brand: brandCtx() };
+  const ctxBase = { footer: footerText(), keywords: S.model.keywords, meta: metaOf(S.model), brand: brandCtx(), stats: sheetStats() };
   S.slides.forEach(s => {
     let cv = slideCanvases.get(s.id);
     if (!cv) { cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1350; slideCanvases.set(s.id, cv); }
@@ -404,7 +405,8 @@ function ensureBillboard() {
   if (!S.poster) return;
   if (!S.poster.bb && S.model) S.poster.bb = P2P.buildBillboard(S.model);
   if (!S.poster.story && S.model) S.poster.story = P2P.buildStory(S.model);
-  if (!S.poster.layout) S.poster.layout = 'story';
+  if (!S.poster.sheet && S.model) S.poster.sheet = P2P.buildSheet(S.model);
+  if (!S.poster.layout) S.poster.layout = 'sheet';
 }
 const EFFECTS = ['benefit', 'mixed', 'none', 'risk'];
 function renderStoryInspector(el) {
@@ -513,10 +515,65 @@ function renderBillboardInspector(el) {
   const cur = el.querySelector('.blk[aria-current=true]'); if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
 }
 
+// ---------- study sheet poster editor ----------
+const SHEET_TONES = { light: 'Light card', outline: 'Outlined', dark: 'Dark highlight', warn: 'Warning (coral)', key: 'Key message', plain: 'No background' };
+const blockText = b => b.k === 'p' ? b.text : b.k === 'ul' ? b.items.join('\n') : b.k === 'flow' || b.k === 'stages' ? (b.steps || b.items).map(x => `${x.title || ''} | ${x.text || ''}`).join('\n') : b.k === 'table' ? b.rows.map(r => r.join(' | ')).join('\n') : b.k === 'big' ? `${b.big} | ${b.label || ''}` : '';
+const BLOCK_LABEL = { p: 'Text', ul: 'Points, one per line', flow: 'Steps, one per line: Title | text', stages: 'Cards, one per line: Title | text', table: 'Rows, one per line: cell | cell', big: 'Big number | label' };
+function setBlockText(b, v) {
+  const lines = v.split('\n').map(x => x.trim()).filter(Boolean), pair = l => { const i = l.indexOf('|'); return [(i < 0 ? l : l.slice(0, i)).trim(), i < 0 ? '' : l.slice(i + 1).trim()]; };
+  if (b.k === 'p') b.text = v;
+  else if (b.k === 'ul') b.items = lines;
+  else if (b.k === 'flow') { const last = (b.steps || []).findIndex(x => x.tone === 'accent'); b.steps = lines.map((l, i) => { const [t, x] = pair(l); return { title: t, text: x, tone: last >= 0 && i === lines.length - 1 ? 'accent' : '' }; }); }
+  else if (b.k === 'stages') b.items = lines.map((l, i) => { const [t, x] = pair(l); const old = (b.items || [])[i] || {}; return { tag: old.tag || `Finding ${i + 1}`, title: x ? t : '', text: x || t, icon: old.icon || 'bulb' }; });
+  else if (b.k === 'table') b.rows = lines.map(l => l.split('|').map(x => x.trim()));
+  else if (b.k === 'big') { const [t, x] = pair(v); b.big = t; b.label = x; }
+}
+function renderSheetInspector(el) {
+  const sh = S.poster.sheet;
+  const blk = (id, title, body) => `<div class="blk" data-b="${id}" aria-current="${id === S.sel.block}"><h4><span>${title}</span></h4>${body}</div>`;
+  let h = `<div class="insp-h"><span class="t">Study sheet poster</span><span class="s">Numbered cards · click the poster to jump to a card</span></div><div class="sec"><div class="warns" id="warns"></div>`;
+  h += blk('header', 'Header', `<label class="f">Line above the title<input type="text" data-h="eyebrow" value="${esc(sh.eyebrow || '')}"></label><label class="f">Under the title<input type="text" data-h="subtitle" value="${esc(sh.subtitle || '')}"></label><label class="f">Number chips, one per line: number | label<textarea data-h="stats" rows="3">${esc((sh.stats || []).map(x => `${x.big} | ${x.label}`).join('\n'))}</textarea></label>`);
+  const vis = sh.cards.filter(c => !c.hidden);
+  sh.cards.forEach((c, ci) => {
+    const n = c.hidden ? '' : vis.indexOf(c) + 1 + ' · ';
+    let b = `<label class="toggle"><input type="checkbox" data-c="${ci}" data-f="show" ${c.hidden ? '' : 'checked'}> Show this card</label>`;
+    b += `<label class="f">Heading<input type="text" data-c="${ci}" data-f="title" value="${esc(c.title || '')}"></label>`;
+    c.blocks.forEach((bl, bi) => { if (BLOCK_LABEL[bl.k]) b += `<label class="f">${BLOCK_LABEL[bl.k]}${bl.k === 'big' ? `<input type="text" data-c="${ci}" data-b2="${bi}" value="${esc(blockText(bl))}">` : `<textarea data-c="${ci}" data-b2="${bi}" rows="${bl.k === 'p' ? 3 : 4}">${esc(blockText(bl))}</textarea>`}</label>`; });
+    b += `<details class="more"><summary>More options</summary><div class="more-b"><div class="row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label class="f">Colour<select data-c="${ci}" data-f="tone">${Object.entries(SHEET_TONES).map(([k, v]) => `<option value="${k}" ${c.tone === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label><label class="f">Width<select data-c="${ci}" data-f="span">${[1, 2, 3].map(k => `<option value="${k}" ${(c.span || 1) === k ? 'selected' : ''}>${k} column${k > 1 ? 's' : ''}</option>`).join('')}</select></label></div>`;
+    b += `<label class="f">Figure in this card<select data-c="${ci}" data-f="fig">${FIG_OPTS(sh.figCard === c.id ? sh.figureId : null)}</select></label>`;
+    b += `<div class="row"><button class="btn sm ghost" type="button" data-c="${ci}" data-mv="-1" ${ci === 0 ? 'disabled' : ''}>Move earlier</button><button class="btn sm ghost" type="button" data-c="${ci}" data-mv="1" ${ci === sh.cards.length - 1 ? 'disabled' : ''}>Move later</button></div></div></details>`;
+    h += blk(c.id, `${n}${esc(c.title || 'Card')}${c.hidden ? ' (hidden)' : ''}`, b);
+  });
+  h += `<p class="hint">Wrap words in **double stars** to make them bold, or *single stars* to colour them.</p><div class="row"><button class="btn sm ghost" type="button" id="shReset">Rebuild from the paper</button></div></div>`;
+  el.innerHTML = h;
+  updateWarnBoxes();
+  const changed = now => { scheduleRender(); commit(now); };
+  el.querySelectorAll('[data-h]').forEach(i2 => i2.addEventListener('input', e => {
+    const k = i2.dataset.h, v = e.target.value;
+    if (k === 'stats') sh.stats = v.split('\n').map(l => { const i = l.indexOf('|'); return { big: (i < 0 ? l : l.slice(0, i)).trim(), label: i < 0 ? '' : l.slice(i + 1).trim() }; }).filter(x => x.big).slice(0, 3);
+    else sh[k] = v;
+    changed();
+  }));
+  el.querySelectorAll('[data-b2]').forEach(i2 => i2.addEventListener('input', e => { setBlockText(sh.cards[+i2.dataset.c].blocks[+i2.dataset.b2], e.target.value); changed(); }));
+  el.querySelectorAll('[data-f]').forEach(i2 => i2.addEventListener(i2.type === 'text' ? 'input' : 'change', e => {
+    const c = sh.cards[+i2.dataset.c], f = i2.dataset.f;
+    if (f === 'show') { c.hidden = !e.target.checked; renderInspector(); changed(true); return; }
+    if (f === 'title') { c.title = e.target.value; changed(); return; }
+    if (f === 'tone') c.tone = e.target.value;
+    if (f === 'span') c.span = +e.target.value;
+    if (f === 'fig') { sh.figureId = e.target.value || null; sh.figCard = e.target.value ? c.id : null; renderInspector(); }
+    changed(true);
+  }));
+  el.querySelectorAll('[data-mv]').forEach(b => b.addEventListener('click', () => { const i = +b.dataset.c, j = i + +b.dataset.mv; [sh.cards[i], sh.cards[j]] = [sh.cards[j], sh.cards[i]]; S.sel.block = sh.cards[j].id; renderInspector(); changed(true); }));
+  $('#shReset').addEventListener('click', () => { commit(true); S.poster.sheet = P2P.buildSheet(S.model); renderInspector(); changed(true); toast('Rebuilt from the paper. Press Undo to go back.'); });
+  el.querySelectorAll('.blk').forEach(box => box.addEventListener('focusin', () => { S.sel.block = box.dataset.b; el.querySelectorAll('.blk').forEach(x => x.setAttribute('aria-current', x === box)); }));
+  const cur = el.querySelector('.blk[aria-current=true]'); if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+}
 function renderPosterInspector(el) {
   ensureBillboard();
   if (S.poster.layout === 'billboard') return renderBillboardInspector(el);
   if (S.poster.layout === 'story') return renderStoryInspector(el);
+  if (S.poster.layout === 'sheet') return renderSheetInspector(el);
   let h = `<div class="insp-h"><span class="t">Poster</span><span class="s">Click a block on the poster to jump to it</span></div><div class="sec"><div class="warns" id="warns"></div>`;
   const colOpt = c => [0, 1, 2].map(k => `<option value="${k}" ${k === c ? 'selected' : ''}>Column ${k + 1}</option>`).join('');
   for (const b of S.poster.blocks) {
@@ -1170,7 +1227,7 @@ function playSlide(s) {
   cancelAnimationFrame(playRaf);
   const vis = visibleSlides(), k = Math.max(0, vis.indexOf(s)), n = Math.max(1, vis.length);
   const end = R.animEnd(s) + 0.4, t0 = performance.now(), cv = $('#bigSlide');
-  const data = { footer: footerText(), keywords: S.model.keywords, meta: metaOf(S.model), brand: brandCtx(), figure: figImg(s.figureId) };
+  const data = { footer: footerText(), keywords: S.model.keywords, meta: metaOf(S.model), brand: brandCtx(), stats: sheetStats(), figure: figImg(s.figureId) };
   const tick = () => {
     const t = (performance.now() - t0) / 1000;
     if (S.slides[S.sel.slide] !== s || t >= end) { drawBig(); return; }
@@ -1184,7 +1241,7 @@ async function buildVideo(progress, story) {
   renderCanvases();
   const vis = visibleSlides(), T = theme(), W = 1080, H = 1350;
   if (!vis.length) throw new Error('no slides');
-  const base = { footer: footerText(), keywords: S.model.keywords, meta: metaOf(S.model), brand: brandCtx() };
+  const base = { footer: footerText(), keywords: S.model.keywords, meta: metaOf(S.model), brand: brandCtx(), stats: sheetStats() };
   const plan = []; let total = 0;
   vis.forEach((s, j) => { const d = slideDuration(s) + (j ? TR : 0); plan.push({ s, start: total }); total += d; });
   const frames = Math.ceil(total * FPS);

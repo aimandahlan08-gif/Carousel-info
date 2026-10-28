@@ -826,12 +826,12 @@ const P2P = (() => {
     if ((mm = t.match(/from\s+(-?\d+(?:\.\d+)?)\s+(?:among|in|for|with)\s+([^,.;]+?)\s+to\s+(-?\d+(?:\.\d+)?)\s+(?:among|in|for|with)\s+([^,.;]+)/i)))
       return { kind: 'compare', a: { v: +mm[1], label: lab(mm[2]) }, b: { v: +mm[3], label: lab(mm[4]) } };
     if ((mm = (b + ' ' + t).match(/(\d+(?:\.\d+)?)\s?(?:×|times|-fold|\sfold)/i)) && +mm[1] > 1 && +mm[1] <= 20) {
-      const than = t.match(/\bthan\s+([^,.;]+)/i), subj = t.split(/\s+(?:were|was|are|had|reported|showed)\s+/i)[0];
+      const than = [...t.matchAll(/\bthan\s+([^,.;]+)/gi)].filter(x => !/^(a|an|one|\d)/i.test(x[1])).pop(), subj = t.split(/\s+(?:were|was|are|had|reported|showed)\s+/i)[0];
       return { kind: 'ratio', v: +mm[1], a: { label: than ? lab(than[1]) : 'Comparison group' }, b: { label: subj && subj !== t ? lab(subj) : 'Group' } };
     }
     if ((mm = t.match(/(\d+(?:\.\d+)?)\s?%\s+(lower|higher|more|less|fewer|greater|smaller|larger)/i)) && +mm[1] < 100) {
       const up = /higher|more|greater|larger/i.test(mm[2]), p = +mm[1];
-      const than = t.match(/\bthan\s+([^,.;]+)/i), subj = t.split(/\s+(?:were|was|are|had|reported|showed)\s+/i)[0];
+      const than = [...t.matchAll(/\bthan\s+([^,.;]+)/gi)].filter(x => !/^(a|an|one|\d)/i.test(x[1])).pop(), subj = t.split(/\s+(?:were|was|are|had|reported|showed)\s+/i)[0];
       return { kind: 'compare', pct: true, a: { v: 100, label: than ? lab(than[1]) : 'Comparison group' }, b: { v: up ? 100 + p : 100 - p, label: subj && subj !== t ? lab(subj) : 'Group' }, note: `${p}% ${mm[2].toLowerCase()}` };
     }
     if ((mm = b.match(/^\s*(\d+(?:\.\d+)?)\s?%\s*$/)) && +mm[1] > 0 && +mm[1] <= 100) return { kind: 'donut', v: +mm[1] / 100, label: label || '' };
@@ -1277,6 +1277,87 @@ const P2P = (() => {
   }
   const talkSeconds = (s, wpm = 130) => Math.round(wcount(s.notes) / wpm * 60) + 4;
 
+  // ---- study sheet: an infographic made of numbered cards (poster and carousel) ----
+  // bold the paper's keywords and any lead phrase ("Term: explanation", "Term — explanation")
+  function boldKey(text, kws = []) {
+    let t = String(text || '').trim();
+    if (!t || /\*/.test(t)) return t;
+    const lead = t.match(/^([^:—–]{3,48})(\s*[:—–]\s+)(.+)$/);
+    if (lead && wc(lead[1]) <= 6) return `**${lead[1].trim()}**${lead[2]}${lead[3]}`;
+    let n = 0;
+    for (const k of kws) {
+      if (n >= 2 || !k || k.length < 4) continue;
+      const re = new RegExp(`(^|[^A-Za-z])(${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?=[^A-Za-z]|$)`, 'i');
+      if (re.test(t)) { t = t.replace(re, (a, p, w) => `${p}**${w}**`); n++; }
+    }
+    return t;
+  }
+  function buildSheet(m) {
+    const st = buildStory(m), kw = (m.keywords || []).slice(0, 6);
+    const B = t => boldKey(t, kw), S = (t, n = 22) => shorten(t, n).replace(/\s*…$/, '');
+    const review = m.mode === 'review', sys = !!m.reviewKind;
+    const nums = keyNumbers(m).filter(x => x.big && x.label).slice(0, 3);
+    const design = studyContext(m).split(' · ').slice(-1)[0] || '';
+    const cards = [];
+    const card = (title, tone, blocks, span = 1, extra = {}) => { const c = { id: id('c'), title, tone, span, blocks: blocks.filter(Boolean), ...extra }; if (c.blocks.length) cards.push(c); return c; };
+    const p = (text, small) => text ? { k: 'p', text, small: !!small } : null;
+    const ul = items => (items || []).filter(Boolean).length ? { k: 'ul', items: items.filter(Boolean) } : null;
+    const sents = (keys, re, n, not) => pool(m, keys, { filter: x => (!re || re.test(x.text)) && (!not || !not.test(x.text)) }).slice(0, n).map(x => x.text);
+    const ICONS_BY = t => /participant|sample|people|student|patient|user/i.test(t) ? 'people' : /risk|harm|depend|danger|worse|poor/i.test(t) ? 'alert' : /well-?being|health|comfort|support|lonel/i.test(t) ? 'heart' : /increase|decrease|higher|lower|more|less|%|times/i.test(t) ? 'bars' : 'bulb';
+    const stages = (list, label) => list.length ? { k: 'stages', items: list.slice(0, 4).map((x, i) => { const txt = typeof x === 'string' ? x : x.text; const head = (txt.match(/^(.{8,60}?)(?:,|;| — | – |:| was | were | is | are )/) || [])[1]; return { tag: `${label} ${i + 1}`, title: head ? head.replace(/^(in the regression model|overall|in total|finally|first|second|third)\s*,?\s*/i, '').replace(/^\w/, c => c.toUpperCase()) : '', text: S(txt, 26), icon: ICONS_BY(txt) }; }) } : null;
+    if (sys) {
+      const pr = m.prisma || {}, f = v => Number(v).toLocaleString('en-US');
+      card('Background', 'light', [p(B(sentencesUpTo(st.question, 34))), p(sents(['introduction'], /little is known|few studies|gap|unclear|limited/i, 1)[0], true)]);
+      card('Review question', 'light', [p(B(sents(['abstract', 'introduction', 'method'], /\b(aim|aimed|objective|purpose|review(ed)? question|this (systematic )?review)\b/i, 1)[0] || st.question))]);
+      card('How the search worked', 'light', [ul(sents(['method', 'abstract'], /searched|databases?|inclusion|eligib|PRISMA|appraised|quality/i, 3).map(x => B(S(x, 20))))]);
+      const flow = [['Records found', pr.identified], ['Screened', pr.screened], ['Full texts read', pr.fulltext], ['Studies included', pr.included]].filter(x => x[1] != null).map(([t, v], i, a) => ({ title: t, text: `n = ${f(v)}`, tone: i === a.length - 1 ? 'accent' : '' }));
+      card('Study selection', 'outline', [flow.length ? { k: 'flow', steps: flow } : null, p(st.methodNote ? B(S(st.methodNote, 30)) : '', true)], 2);
+      card('What it means', 'dark', [p(B(st.why)), ul(sents(['discussion', 'conclusion'], /should|implication|practice|design|clinician|user/i, 2).map(x => S(x, 18)))]);
+      if ((st.table || []).length) card('What the evidence shows', 'light', [{ k: 'table', head: st.tHead || ['Outcome', 'Evidence'], rows: st.table.map(r => [r.label, r.value]) }], 2);
+      card('Quality of the evidence', 'light', [ul(sents(['method', 'results', 'discussion', 'limitations'], /risk of bias|quality|MMAT|GRADE|certainty|apprais/i, 3).map(x => B(S(x, 18))))]);
+      card('Key findings', 'plain', [stages((st.items || []).map(x => x.text), 'Finding')], 3);
+      card('Limitations', 'warn', [ul([st.lim, ...sents(['limitations', 'discussion'], /limit|cannot|bias|small|generali/i, 2)].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).slice(0, 3).map(x => S(x, 18)))]);
+      card('Take-home message', 'key', [p(B(st.take))], 2);
+    } else if (review) {
+      card('Overview', 'light', [p(B(sentencesUpTo(st.question, 36)))], 1);
+      (m.topics || []).slice(0, 6).forEach(tp => {
+        const ss = (tp.ranked || []).slice(0, 3).sort((a, b) => a.order - b.order).map(x => x.text);
+        const steps = (tp.steps || []).slice(0, 4);
+        card(tp.heading.replace(/^[^:]+:\s*/, s => s.length < 22 ? '' : s) || tp.heading, 'light', [p(B(S(ss[0] || '', 26))), steps.length ? { k: 'flow', steps: steps.map((x, i) => ({ title: x, text: '', tone: i === steps.length - 1 ? 'accent' : '' })), vertical: true } : ul(ss.slice(1, 3).map(x => B(S(x, 16))))]);
+      });
+      const warnS = pool(m, ['discussion', 'conclusion', 'introduction'], { filter: x => /urgent|refer(red)?\b|danger|avoid|life-threatening|complication|red flag|immediately|never|true emergency|must be/i.test(x.text) }).slice(0, 4).map(x => x.text);
+      (m.topics || []).forEach(tp => (tp.ranked || []).forEach(x => { if (warnS.length < 4 && /urgent|life-threatening|refer(red)?\b|danger|immediately|complication|true emergency|must be/i.test(x.text) && !warnS.includes(x.text)) warnS.push(x.text); }));
+      card('Key points', 'dark', [ul((st.items || []).map(x => B(S(x.text, 18))))]);
+      if (warnS.length) card('Watch out for', 'warn', [ul(warnS.map(x => B(S(x, 16))))]);
+      card('Take-home message', 'key', [p(B(st.take))], 2);
+    } else {
+      const sample = sampleFrom(m);
+      const same = (a, b) => { const wa = String(a).toLowerCase().match(/[a-z]{4,}/g) || [], wb = String(b).toLowerCase(); return wa.length && wa.filter(w => wb.includes(w)).length / wa.length > 0.5; };
+      card('Background', 'light', [p(B(sentencesUpTo(st.question, 34))), p(sents(['introduction'], /little is known|few studies|gap|unclear|limited|however/i, 3).filter(x => !same(x, st.question))[0], true)]);
+      const aim = sents(['introduction', 'abstract'], /\b(aim|aimed|objective|purpose|we (tested|examined|investigated)|this study)\b/i, 1)[0];
+      const hyp = sents(['introduction'], /hypothes/i, 2);
+      card('Aim', 'light', [p(B(aim || st.question)), hyp.length ? ul(hyp.map(x => S(x, 16))) : null]);
+      if (sample) {
+        const n = Number(sample.n.replace(/,/g, '')).toLocaleString('en-US');
+        const det = sents(['participants', 'method'], /\b(aged|mean age|M = |female|male|women|men|recruited|universit|school|hospital|identified as|lived)\b/i, 4).filter(x => x !== sample.sentence.text && !/regression|analys|\btest(ed)?\b|controlling/i.test(x));
+        card('Participants', 'light', [{ k: 'big', big: n, label: sample.unit }, ul([S(sample.sentence.text, 18), ...det.map(x => S(x, 14))].slice(0, 3).map(B))]);
+      }
+      card('Method', 'outline', [(st.steps || []).length ? { k: 'flow', steps: st.steps.map((x, i) => ({ title: x.title, text: S(x.text, 12), tone: '' })) } : null, p(st.methodNote ? B(S(st.methodNote, 30)) : '', true)], 2);
+      card('Why it matters', 'dark', [p(B(st.why)), ul(sents(['discussion', 'conclusion'], /should|could|implication|practice|policy|universit|intervention/i, 2).filter(x => !x.includes((st.why || '').slice(0, 30))).map(x => S(x, 16)))]);
+      card('What we found', 'plain', [stages((st.items || []).map(x => x.text), 'Finding')], 3);
+      const trows = (st.table || []).filter(r => !(sample && (r.value.replace(/,/g, '') === sample.n.replace(/,/g, '') || r.label.toLowerCase() === sample.unit.toLowerCase())));
+      if (trows.length) card('Key results', 'light', [{ k: 'table', head: st.tHead || ['Result', 'Value'], rows: trows.map(r => [r.label, r.value]) }], 2);
+      const fut = sents(['limitations', 'discussion', 'conclusion'], /future (research|studies|work)|should (examine|test|follow|explore|use)/i, 2);
+      card('Limitations', 'warn', [ul([st.lim, ...sents(['limitations'], /limit|cannot|self-report|cross-sectional|small|generali/i, 2)].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).slice(0, 3).map(x => S(x, 18)))]);
+      card('Next steps', 'light', [ul(fut.map(x => B(S(x, 18))))]);
+      card('Take-home message', 'key', [p(B(st.take))], 1);
+    }
+    const eyebrow = [m.journal, m.year, sys ? 'Systematic review' : review ? 'Review' : design].filter(Boolean).join(' · ');
+    const au = m.authors || [], subtitle = [au.length > 3 ? au.slice(0, 3).join(', ') + ' et al.' : au.join(', '), (m.affiliations || [])[0]].filter(Boolean).join(' · ');
+    const statsOut = nums.length ? nums.map(x => ({ big: x.big, label: x.label })) : review ? [{ big: String((m.topics || []).length), label: 'topics covered' }] : [];
+    return { eyebrow, subtitle, stats: statsOut, cards, refs: st.refs || [] };
+  }
+
   function buildReviewPoster(m) {
     const join = (arr, n, per) => arr.slice(0, n).sort((a, b) => a.order - b.order).map(x => shorten(x.text, per)).join(' ');
     const intro = pool(m, ['abstract', 'introduction'], { decay: 0.1 });
@@ -1455,7 +1536,7 @@ const P2P = (() => {
 
   function buildPoster(m) {
     const base = m.mode === 'review' ? buildReviewPoster(m) : buildClassicPoster(m);
-    return { layout: 'story', ...base, bb: buildBillboard(m), story: buildStory(m) };
+    return { layout: 'sheet', ...base, bb: buildBillboard(m), story: buildStory(m), sheet: buildSheet(m) };
   }
   function buildClassicPoster(m) {
     const join = (arr, n, perMax) => arr.slice(0, n).sort((a, b) => (a.sec === b.sec ? a.order - b.order : 0)).map(x => shorten(x.text, perMax)).join(' ');
@@ -1484,6 +1565,6 @@ const P2P = (() => {
     };
   }
 
-  return { buildTalk, factCheck, studyContext, chartFor, numTokens, toQuestion, objectivesIn, OUTLINES, talkSeconds, speak, buildStory, buildBillboard, detectPrisma, _orderPage: orderPage, extractLines, buildModel, buildSlides, buildPoster, cheatFrom, hookOptions, ctaFor, AUD, topicNoun, findStats, shorten, cleanSentence, wc, shortCite, LABELS, ORDER, STAT_RE, splitSentences };
+  return { buildSheet, boldKey, buildTalk, factCheck, studyContext, chartFor, numTokens, toQuestion, objectivesIn, OUTLINES, talkSeconds, speak, buildStory, buildBillboard, detectPrisma, _orderPage: orderPage, extractLines, buildModel, buildSlides, buildPoster, cheatFrom, hookOptions, ctaFor, AUD, topicNoun, findStats, shorten, cleanSentence, wc, shortCite, LABELS, ORDER, STAT_RE, splitSentences };
 })();
 if (typeof module !== 'undefined') module.exports = P2P;

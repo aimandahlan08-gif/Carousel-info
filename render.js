@@ -239,7 +239,7 @@ const R = (() => {
   // ---- slide ----
   // tt = seconds since the slide appeared (undefined = finished, static image)
   function renderSlide(cv, s, i, n, T, ctxData, tt) {
-    if (T.deco === 'sheet') return renderSheetSlide(cv, s, i, n, T, ctxData);
+    if (T.deco === 'sheet' || s.rev || s.type === 'sheet') return renderSheetSlide(cv, s, i, n, T, ctxData);
     const W = 1080, H = 1350, P = 92;
     const ctx = cv.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1661,13 +1661,16 @@ const R = (() => {
     const meta = ctxData.meta || {}, kws = ctxData.keywords || [], brand = ctxData.brand || {};
     const B = t => (typeof P2P !== 'undefined' && P2P.boldKey) ? P2P.boldKey(t, kws) : t;
     // top line and footer
-    eyebrowText(ctx, T, brand.series || (s.type === 'hook' ? [meta.journal, meta.year].filter(Boolean).join(' · ') || 'New research' : 'Paper summary'), P, P + 18, 22, C.head);
+    eyebrowText(ctx, T, (s.type === 'hook' && s.eyebrow) || brand.series || (s.rev ? 'Revision notes' : s.type === 'hook' ? [meta.journal, meta.year].filter(Boolean).join(' · ') || 'New research' : 'Paper summary'), P, P + 18, 22, C.head);
     ctx.font = fontStr(T.body, 22, 600); ctx.fillStyle = T.muted; ctx.textAlign = 'right'; ctx.fillText(`${i + 1} / ${n}`, W - P, P + 18); ctx.textAlign = 'left';
     ctx.fillStyle = C.head; ctx.fillRect(P, P + 42, W - 2 * P, 3);
     const footY = H - 70;
     ctx.fillStyle = T.line; ctx.fillRect(P, footY - 44, W - 2 * P, 2);
     ctx.font = fontStr(T.body, 22); ctx.fillStyle = T.muted; ctx.fillText(ctxData.footer || '', P, footY);
-    if (i < n - 1) { ctx.font = fontStr(T.body, 24, 700); ctx.fillStyle = C.head; ctx.textAlign = 'right'; ctx.fillText('Swipe  →', W - P, footY); ctx.textAlign = 'left'; }
+    if (i < n - 1) {
+      ctx.font = fontStr(T.body, 24, 700); ctx.fillStyle = C.head; ctx.textAlign = 'right'; ctx.fillText('Swipe', W - P - 40, footY); ctx.textAlign = 'left';
+      ctx.strokeStyle = C.head; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(W - P - 28, footY - 8); ctx.lineTo(W - P, footY - 8); ctx.moveTo(W - P - 10, footY - 17); ctx.lineTo(W - P, footY - 8); ctx.lineTo(W - P - 10, footY + 1); ctx.stroke();
+    }
     const top = P + 90, bottom = H - 140, cw = W - 2 * P;
     const heading = (num, text, y) => { const r = fit(ctx, (num ? num + ' · ' : '') + (text || ''), T.display, { w: cw, h: 200 }, { max: 66, min: 44, lh: 1.1, maxLines: 3 }); drawText(ctx, r, T.display, P, y, { lh: 1.1, color: C.head }); return r.lines.length * r.size * 1.1; };
     // the card grows to fill the slide (up to 50 px text) and shrinks no lower than 30 px
@@ -1684,9 +1687,22 @@ const R = (() => {
       const hr = fit(ctx, s.heading, T.display, { w: cw, h: 520 }, { max: 112, min: 60, lh: 1.06 });
       if (!hr.ok) warn.push('Headline is too long to fit. Shorten it.');
       y += drawText(ctx, hr, T.display, P, y, { lh: 1.06, color: C.head, hl: T.accent }) + 34;
-      const tr = fit(ctx, meta.title || '', T.body, { w: cw, h: 120 }, { max: 32, min: 24, lh: 1.3, maxLines: 3 });
+      const subT = s.contents && String(meta.title || '').trim().toLowerCase() === String(s.heading || '').replace(/\*/g, '').trim().toLowerCase() ? (s.body || '') : (s.contents && s.body ? s.body + ' · ' : '') + (meta.title || '');
+      const tr = fit(ctx, subT, T.body, { w: cw, h: 120 }, { max: 32, min: 24, lh: 1.3, maxLines: 3 });
       y += drawText(ctx, tr, T.body, P, y, { lh: 1.3, color: T.muted }) + 40;
-      const stats = (ctxData.stats || []).slice(0, 3);
+      const stats = s.contents ? [] : (ctxData.stats || []).slice(0, 3);
+      if (s.contents && s.contents.length) {
+        // "In this post": a numbered contents list in two columns
+        eyebrowText(ctx, T, 'In this post', P, y + 8, 22, C.head); y += 34;
+        const items = s.contents.slice(0, 14), half = Math.ceil(items.length / 2), colW = (cw - 24) / 2, rowH = Math.min(66, (bottom - 110 - y) / half);
+        items.forEach((t, k) => {
+          const cx = P + (k < half ? 0 : colW + 24), cy = y + (k % half) * rowH;
+          ctx.fillStyle = C.chip; rr(ctx, cx, cy, colW, rowH - 8, 10); ctx.fill();
+          ctx.font = fontStr(T.body, Math.min(24, rowH * 0.48), 700); ctx.fillStyle = C.head; ctx.fillText(String(k + 1).padStart(2, '0'), cx + 14, cy + (rowH - 8) / 2 + 8);
+          const r = fit(ctx, t, T.body, { w: colW - 70, h: rowH - 12 }, { max: Math.min(30, rowH * 0.5), min: 16, lh: 1.1, maxLines: 1 }); drawText(ctx, r, T.body, cx + 58, cy + (rowH - 8 - r.size * 1.1) / 2, { lh: 1.1, color: T.ink });
+        });
+        y += half * rowH + 20;
+      }
       if (stats.length) { const g = 18, w = (cw - g * (stats.length - 1)) / stats.length; stats.forEach((st, k) => sheetStat(ctx, T, st, P + k * (w + g), y, w, 190, 40)); y += 190 + 36; }
       let tx = P;
       if (brand.avatar) { avatar(ctx, brand.avatar, P, bottom - 74, 64, C.head); tx = P + 80; }
@@ -1706,7 +1722,14 @@ const R = (() => {
     const num = i;
     y += heading(num, s.heading || label, y) + 30;
     const tone = /limit|keep in mind|caution|risk/i.test(label + ' ' + (s.heading || '')) ? 'warn' : /why|matter|mean|take/i.test(label + ' ' + (s.heading || '')) ? 'dark' : 'light';
-    if (s.type === 'stat') {
+    if (s.type === 'sheet') {
+      const cards = (s.cards || []).filter(c => !c.hidden), g = 22, room = bottom - y - 200;
+      const total = b0 => cards.reduce((a, c) => a + sheetCard(ctx, T, c, P, 0, cw, b0, false), 0) + g * Math.max(0, cards.length - 1);
+      let lo = 28, hi = 50;
+      if (total(hi) <= room) lo = hi; else if (total(lo) > bottom - y) warn.push('This slide has a lot of text. Shorten it or hide a card.'); else for (let k = 0; k < 12; k++) { const mid = (lo + hi) / 2; if (total(mid) <= room) lo = mid; else hi = mid; }
+      let yy = y; cards.forEach(c => { yy += sheetCard(ctx, T, c, P, yy, cw, lo, true) + g; });
+      ctxData.used = yy - g;
+    } else if (s.type === 'stat') {
       const c = { tone: 'light', blocks: [s.big ? { k: 'big', big: s.big, label: s.bigLabel || '' } : null, s.ctx ? { k: 'p', text: String(s.ctx).toUpperCase(), small: true } : null, s.body ? { k: 'p', text: B(s.body) } : null].filter(Boolean) };
       const ch = typeof P2P !== 'undefined' && P2P.chartFor && s.visual !== 'none' ? P2P.chartFor(s.body || '', s.big || '', s.bigLabel || '') : null;
       y += placeCard(c, y, (bottom - y) - (ch ? 470 : 0), 46) + 30;

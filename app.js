@@ -75,7 +75,7 @@ function exampleFigure() {
 
 // ---------- persistence & history ----------
 const KEY = 'paper2poster-v1';
-function snapshot() { return JSON.stringify({ slides: S.slides, talk: S.talk, poster: S.poster, theme: S.theme, posterSize: S.posterSize, handle: S.handle, meta: metaOf(S.model) }); }
+function snapshot() { return JSON.stringify({ slides: S.slides, postType: S.postType || 'summary', otherSlides: S.otherSlides || null, talk: S.talk, poster: S.poster, theme: S.theme, posterSize: S.posterSize, handle: S.handle, meta: metaOf(S.model) }); }
 function metaOf(m) { return m ? { title: m.title, authors: m.authors, affiliations: m.affiliations, journal: m.journal, year: m.year, doi: m.doi, keywords: m.keywords } : null; }
 const hist = { past: [], future: [], last: null, t: 0 };
 function commit(now) {
@@ -83,7 +83,7 @@ function commit(now) {
   const go = () => { const snap = snapshot(); if (snap === hist.last) return; if (hist.last) hist.past.push(hist.last); if (hist.past.length > 80) hist.past.shift(); hist.last = snap; hist.future = []; updateUndo(); save(); };
   if (now) go(); else hist.t = setTimeout(go, 450);
 }
-function restoreSnap(snap) { const o = JSON.parse(snap); Object.assign(S, { slides: o.slides, talk: o.talk || null, poster: o.poster, theme: o.theme, posterSize: o.posterSize, handle: o.handle }); Object.assign(S.model, o.meta); hist.last = snap; fillMeta(); renderThemes(); renderAll(true); save(); updateUndo(); }
+function restoreSnap(snap) { const o = JSON.parse(snap); Object.assign(S, { slides: o.slides, postType: o.postType || 'summary', otherSlides: o.otherSlides || null, talk: o.talk || null, poster: o.poster, theme: o.theme, posterSize: o.posterSize, handle: o.handle }); Object.assign(S.model, o.meta); hist.last = snap; fillMeta(); renderThemes(); renderAll(true); save(); updateUndo(); }
 function undo() { commit(true); if (!hist.past.length) return; hist.future.push(hist.last); restoreSnap(hist.past.pop()); }
 function redo() { if (!hist.future.length) return; hist.past.push(hist.last); restoreSnap(hist.future.pop()); }
 function updateUndo() { $('#undoBtn').disabled = !hist.past.length; $('#redoBtn').disabled = !hist.future.length; }
@@ -98,7 +98,7 @@ let saveT = 0;
 function save() {
   clearTimeout(saveT);
   saveT = setTimeout(async () => {
-    const data = { v: 1, at: Date.now(), model: S.model, slides: S.slides, talk: S.talk, poster: S.poster, theme: S.theme, posterSize: S.posterSize, handle: S.handle, source: S.source, figures: S.figures };
+    const data = { v: 1, at: Date.now(), model: S.model, slides: S.slides, postType: S.postType || 'summary', otherSlides: S.otherSlides || null, talk: S.talk, poster: S.poster, theme: S.theme, posterSize: S.posterSize, handle: S.handle, source: S.source, figures: S.figures };
     let idbOk = false;
     try { idbOk = await IDB.set(KEY, JSON.parse(JSON.stringify(data))); } catch (e) { idbOk = false; }
     try {
@@ -160,6 +160,7 @@ function fillBrand() {
 }
 function applyVoice() {
   const cfg = { ...S.cfg, series: S.brand.series };
+  if (S.postType === 'revision') { scheduleRender(); renderInspector(); commit(true); return; }
   const by = r => S.slides.find(s => s.role === r);
   const review = S.model.mode === 'review';
   const h = by('hook');
@@ -249,6 +250,7 @@ function posterMeta() { const m = metaOf(S.model); return { ...m, affiliations: 
 function figMap() { const o = {}; for (const f of S.figures) if (imgs[f.id]) o[f.id] = imgs[f.id]; return o; }
 
 function renderAll(rebuildInspector) {
+  syncPostType();
   if (rebuildInspector) renderInspector();
   renderFigs();
   renderCanvases();
@@ -343,6 +345,16 @@ function renderInspector() {
   } else if (s.type !== 'stat') {
     h += `<label class="f">Heading<input type="text" id="iHeading" value="${esc(s.heading)}"></label>`;
   }
+  if (s.type === 'sheet') {
+    (s.cards || []).forEach((c, ci) => {
+      let b = `<div class="blk" data-rc="${ci}"><h4><span>${esc(c.title || 'Card ' + (ci + 1))}</span></h4>`;
+      b += `<label class="f">Card heading<input type="text" data-rc="${ci}" data-rf="title" value="${esc(c.title || '')}"></label>`;
+      (c.blocks || []).forEach((bl, bi) => { if (BLOCK_LABEL[bl.k]) b += `<label class="f">${BLOCK_LABEL[bl.k]}<textarea data-rc="${ci}" data-rb="${bi}" rows="${Math.min(7, Math.max(2, blockText(bl).split('\n').length + 1))}">${esc(blockText(bl))}</textarea></label>`; });
+      b += `<label class="f">Colour<select data-rc="${ci}" data-rf="tone">${Object.entries(SHEET_TONES).map(([k, v]) => `<option value="${k}" ${k === (c.tone || 'light') ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>`;
+      h += b;
+    });
+    h += `<div id="iWc">${wcTag(sheetWords(s), 40)}</div><p class="hint">Wrap words in **double stars** to make them bold. Check every line against the source before posting.</p>`;
+  }
   if (s.type === 'stat') {
     h += `<div class="row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label class="f">Big number<input type="text" id="iBig" value="${esc(s.big)}"></label><label class="f">Under the number<input type="text" id="iBigLabel" value="${esc(s.bigLabel)}"></label></div>`;
   }
@@ -360,7 +372,7 @@ function renderInspector() {
   if (s.type === 'text') h += `<label class="f">Step diagram (optional, one step per line)<textarea id="iSteps" rows="3" placeholder="Assess\nTreat\nRefer">${esc((s.steps || []).join('\n'))}</textarea></label>`;
   if (R.visualFor({ ...s, visual: 'auto' })) h += `<label class="f">Graphic<select id="iVis"><option value="auto">${({ donut: 'Donut chart', bars: 'Comparison bars', people: 'People grid', steps: 'Step diagram' })[R.visualFor({ ...s, visual: 'auto' }).kind]}</option><option value="none" ${s.visual === 'none' ? 'selected' : ''}>None</option></select></label>`;
   if (s.type === 'figure') h += `<label class="f">Figure<select id="iFig">${FIG_OPTS(s.figureId)}</select></label>${S.figures.length ? '' : '<p class="hint">Add a figure from the left panel to show it on this slide.</p>'}`;
-  if (s.type !== 'cite') h += `<label class="f">Icon<select id="iIcon">${ICON_OPTS()}</select></label>`;
+  if (s.type !== 'cite' && s.type !== 'sheet') h += `<label class="f">Icon<select id="iIcon">${ICON_OPTS()}</select></label>`;
   h += aiSlideBox(s);
   h += `<div class="row"><button class="btn sm ghost" id="iUp" ${S.sel.slide === 0 ? 'disabled' : ''}>Move earlier</button><button class="btn sm ghost" id="iDown" ${S.sel.slide === S.slides.length - 1 ? 'disabled' : ''}>Move later</button></div></div>`;
   el.innerHTML = h;
@@ -391,7 +403,31 @@ function renderInspector() {
   on('iCheatRefresh', 'click', () => { refreshCheat(); renderInspector(); scheduleRender(); commit(true); });
   on('iSteps', 'input', e => { s.steps = e.target.value.split('\n'); changed(); });
   on('iVis', 'change', e => { s.visual = e.target.value; scheduleRender(); commit(true); });
+  el.querySelectorAll('textarea[data-rb]').forEach(t => t.addEventListener('input', e => { setBlockText(s.cards[+t.dataset.rc].blocks[+t.dataset.rb], e.target.value); const w = $('#iWc'); if (w) w.innerHTML = wcTag(sheetWords(s), 40); changed(); }));
+  el.querySelectorAll('[data-rf]').forEach(i2 => i2.addEventListener(i2.tagName === 'SELECT' ? 'change' : 'input', e => { const c = s.cards[+i2.dataset.rc]; c[i2.dataset.rf] = e.target.value; if (i2.tagName === 'SELECT') { scheduleRender(); commit(true); } else changed(); }));
 }
+function sheetWords(s) { return (s.cards || []).map(c => (c.blocks || []).map(blockText).join(' ')).join(' '); }
+function sheetLines(s) { return (s.cards || []).flatMap(c => (c.blocks || []).flatMap(b => blockText(b).split('\n'))).map(x => x.replace(/\s*\|\s*/g, ': ').trim()).filter(Boolean); }
+// ---------- post type: paper summary or revision notes ----------
+function setPostType(t) {
+  if (!S.model || t === (S.postType || 'summary')) return;
+  commit(true);
+  const cur = S.slides;
+  S.slides = S.otherSlides || (t === 'revision' ? P2P.buildRevision(S.model) : P2P.buildSlides(S.model, { ...S.cfg, series: S.brand.series }));
+  S.otherSlides = cur; S.postType = t; S.sel.slide = 0;
+  if (typeof slideCanvases !== 'undefined' && slideCanvases.clear) slideCanvases.clear();
+  $('#strip').innerHTML = '';
+  syncPostType(); renderAll(true); commit(true);
+  const few = t === 'revision' && S.slides.filter(x => x.type === 'sheet').length < 4;
+  toast(few ? 'Only a few clinical sections were found. Revision notes work best with a clinical review or guideline (headings like Definition, Investigations, Management).' : t === 'revision' ? 'Revision notes built from the paper. Your paper summary is kept: switch back any time.' : 'Back to the paper summary.', few ? 6000 : 2600);
+}
+function syncPostType() {
+  const t = S.postType || 'summary';
+  document.querySelectorAll('input[name=ptype]').forEach(r => { r.checked = r.value === t; });
+  const hint = $('#ptHint'); if (hint) hint.textContent = t === 'revision' ? 'High-yield notes in clinical order (definition, causes, features, investigations, management, red flags, pearls). Works best with a clinical review or guideline.' : 'A summary of the study: hook, method, findings and why it matters.';
+  const pol = $('#aiPolish'); if (pol) pol.hidden = t === 'revision';
+}
+document.querySelectorAll('input[name=ptype]').forEach(r => r.addEventListener('change', () => { if (r.checked) setPostType(r.value); }));
 function moveSlide(d) { const i = S.sel.slide, j = i + d; if (j < 0 || j >= S.slides.length) return; [S.slides[i], S.slides[j]] = [S.slides[j], S.slides[i]]; S.sel.slide = j; renderAll(true); commit(true); }
 function updateWarnBoxes() {
   const box = $('#warns'); if (!box) return;
@@ -759,7 +795,8 @@ $('#pLayout').addEventListener('change', e => { ensureBillboard(); S.poster.layo
 
 // ---------- build ----------
 function buildOutputs() {
-  S.slides = P2P.buildSlides(S.model, { ...S.cfg, series: S.brand.series });
+  const sum = P2P.buildSlides(S.model, { ...S.cfg, series: S.brand.series });
+  if (S.postType === 'revision') { S.slides = P2P.buildRevision(S.model); S.otherSlides = sum; } else { S.postType = 'summary'; S.slides = sum; S.otherSlides = null; }
   S.poster = P2P.buildPoster(S.model);
   S.talk = null; S.talk = { ...P2P.buildTalk(S.model, talkCfg()), edited: false };
   S.sel.slide = 0; S.sel.block = 'intro'; S.sel.talk = 0; if (typeof talkCanvases !== 'undefined') { talkCanvases.clear(); $('#tStrip').innerHTML = ''; }
@@ -1118,6 +1155,7 @@ function renderAiBar() {
 }
 async function polishAll() {
   const out = $('#aiBarOut');
+  if (S.postType === 'revision') { toast('Polish works on paper summaries. Edit revision cards in the panel on the right.'); return; }
   if (S.model.mode === 'review') return polishReview(out);
   const j = await ask(`${FACTS} ${PLAIN} No hashtags.\n\nRewrite the text of an Instagram carousel (1080x1350 slides) that explains this paper to a general audience. Reply with only this JSON object:\n{"hook": "headline for slide 1, max 10 words", "problem": "why the study was needed, max 22 words", "method": ["3 short points about what the researchers did, max 8 words each"], "sample": {"big": "the sample size exactly as in the paper, e.g. 612", "label": "who took part, max 4 words", "caption": "max 16 words"}, "finding1": {"big": "the single most striking number from the results, copied exactly, e.g. 41%", "caption": "what that number means, max 18 words"}, "finding2": "a second key result, max 20 words", "why": "why it matters, max 22 words", "limitation": "the main limitation, max 18 words"}\nUse null for any part the paper does not support.\n\nPaper excerpt:\n${paperContext()}`, out, { json: true, tier: 'default', cache: false });
   if (!j || typeof j !== 'object') return;
@@ -1320,7 +1358,7 @@ $('#exportVideo').addEventListener('click', async e => {
 function bindBrand() {
   $('#bSeries').addEventListener('input', e => {
     S.brand.series = e.target.value; saveBrand();
-    const h = S.slides.find(s => s.role === 'hook');
+    const h = S.slides.find(s => s.role === 'hook' && !s.rev);
     if (h) h.label = S.brand.series.trim() || (S.cfg.author ? (S.model.mode === 'review' ? 'Our new review' : 'Our new research') : (S.model.mode === 'review' ? 'Review' : 'New research'));
     scheduleRender(); commit();
   });
@@ -1370,6 +1408,7 @@ function creditLine() {
   return `Paper: "${m.title}" by ${cite || 'the authors'}${m.journal ? `, ${m.journal}` : ''}. All credit to the authors.`;
 }
 function keyPoints(max = 4) {
+  if (S.postType === 'revision') return visibleSlides().filter(s => s.type === 'sheet').slice(0, max).map(s => plain(s.heading) + ': ' + plain(sheetLines(s)[0] || '')).filter(Boolean);
   return visibleSlides().filter(s => ['problem', 'finding1', 'finding2', 'why', 'topic', 'sample'].includes(s.role)).slice(0, max)
     .map(s => (s.role === 'topic' ? plain(s.heading) + ': ' : '') + plain(s.body)).filter(Boolean);
 }
@@ -1385,6 +1424,7 @@ function kitAlt() {
     if (s.type === 'hook') d = plain(s.heading);
     else if (s.type === 'stat') d = `${plain(s.big)} ${plain(s.bigLabel)}. ${plain(s.body)}`;
     else if (s.type === 'list') d = `${plain(s.heading)}: ${(s.bullets || []).filter(Boolean).map(plain).join('; ')}.`;
+    else if (s.type === 'sheet') d = `${plain(s.heading)}. ${sheetLines(s).map(plain).join('. ')}.`;
     else if (s.type === 'cheat') d = `${plain(s.heading)}. ${(s.items || []).map(it => `${plain(it.title)}: ${plain(it.text)}`).join('. ')}.`;
     else if (s.type === 'cite') d = `Citation: ${m.title}, by ${(m.authors || []).join(', ')}${m.journal ? '. ' + m.journal : ''}${m.year ? ', ' + m.year : ''}.${m.doi ? ' DOI ' + m.doi + '.' : ''}`;
     else { d = `${plain(s.heading)}. ${plain(s.body)}`; const st = (s.steps || []).filter(Boolean); if (st.length) d += ` Steps: ${st.map(plain).join(', ')}.`; if (s.type === 'figure' && s.figureId) d += ' Includes a figure from the paper.'; }
@@ -1637,6 +1677,7 @@ function carouselClaims() {
     const where = `Slide ${i + 1} · ${s.label}`, push = (t, o = {}) => { if (t && String(t).trim()) out.push({ where, text: String(t), ...o }); };
     if (s.big) push(`${s.big} ${s.bigLabel || ''}`, { numbersOnly: true });
     if (s.type !== 'hook' && s.type !== 'cite') push(s.body); (s.bullets || []).forEach(b => push(b));
+    if (s.type === 'sheet') sheetLines(s).forEach(l => push(l.replace(/\*/g, '')));
     if (s.type === 'hook' && isNum(s.heading || '')) push(s.heading, { numbersOnly: true });
   });
   return out.filter(x => x.numbersOnly ? isNum(x.text) : P2P.wc(x.text) >= 5 || isNum(x.text));
@@ -1966,7 +2007,7 @@ $('#undoBtn').addEventListener('click', undo); $('#redoBtn').addEventListener('c
   await loadBrand(); fillBrand(); bindBrand();
   const saved = await loadProject();
   if (saved && saved.model && saved.slides) {
-    Object.assign(S, { model: saved.model, slides: saved.slides, talk: saved.talk || null, poster: saved.poster, theme: saved.theme || 'academic', posterSize: saved.posterSize || 'a0', handle: saved.handle || '', source: saved.source || S.source, figures: saved.figures || [] });
+    Object.assign(S, { model: saved.model, slides: saved.slides, postType: saved.postType || 'summary', otherSlides: saved.otherSlides || null, talk: saved.talk || null, poster: saved.poster, theme: saved.theme || 'academic', posterSize: saved.posterSize || 'a0', handle: saved.handle || '', source: saved.source || S.source, figures: saved.figures || [] });
     if (!R.THEMES[S.theme]) S.theme = 'academic';
     for (const f of S.figures) { const im = new Image(); im.src = f.src; try { await im.decode(); imgs[f.id] = im; } catch (e) {} }
     fillMeta(); renderThemes();

@@ -48,6 +48,7 @@ a figure library. Poster and carousel both render from this model.
 - Carousel: 1080x1350 px (4:5). Max ~40 words per slide. Slide counter + swipe arrow on every slide but the last.
 - Carousel blueprint: hook, problem, method, sample (big number), key finding 1 (biggest stat, huge type),
   key finding 2, why it matters, limitations, citation + DOI QR + call to action.
+- Revision notes (Social post → Post type): a medical-student carousel in clinical order (Definition, Aetiology, Risk factors, Pathophysiology, History, Examination, Investigations, Management, Complications, Red flags, Pearls), built by buildRevision in core.js from a clinical review or guideline. Multi-condition reviews get one Recognise / Manage / Red flag slide per condition. Every slide keeps its source sentence; last slide says it is not a substitute for local guidelines.
 - Poster: A0 landscape by default (also A0 portrait, 48x36 in). Title >= 72pt, body >= 24pt at print size.
 - Talk slides: 1920x1080. Main text never below 24 pt (48 px); warn instead of shrinking further. Aim for under 40 words per slide; detail goes in the script.
 - Talk types: conference talk, proposal defence and thesis defence (viva) follow the outlines in OUTLINES in core.js. Optional examiner slides (theory, hypotheses, instruments, analysis, ethics, timeline, gap, limitations, contribution) start switched off.

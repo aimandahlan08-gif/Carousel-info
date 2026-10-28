@@ -136,6 +136,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
 .stage { overflow: auto; min-height: 0; background-color: var(--bg); background-image: radial-gradient(var(--dot) 1.1px, transparent 1.2px); background-size: 18px 18px; padding: 22px; }
 [hidden] { display: none !important; }
 .view[hidden] { display: none !important; }
+.ptype { margin: 0 0 14px; } .ptype .seg { grid-auto-flow: column; justify-content: start; gap: 18px; font-size: 14px; } .ptype .hint { margin-top: 6px; }
 .car { display: grid; grid-template-columns: minmax(0, 430px) minmax(0, 1fr); gap: 22px; align-items: start; }
 .big { width: min(430px, 100%); aspect-ratio: 4 / 5; max-width: 100%; display: block; box-shadow: 0 18px 40px -18px rgba(10, 20, 15, .45), 0 2px 6px rgba(10,20,15,.12); border-radius: 4px; background: #fff; }
 .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 14px; align-content: start; }
@@ -402,6 +403,7 @@ details.src p { margin: 6px 0 0; }
         <div class="view" id="vCarousel">
           <div class="aibar" id="aiBar" hidden><strong><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l2.2 7.3 7.3 2.2-7.3 2.2L12 21.5l-2.2-7.3L2.5 12l7.3-2.2z"/></svg>Ask Claude</strong><button class="btn sm" type="button" id="aiPolish">Polish all slides</button><button class="btn sm" type="button" id="aiCaption">Write the post caption</button><span class="hint">Uses your Claude account. Numbers are checked against the paper.</span></div>
           <div class="ai-out" id="aiBarOut" hidden></div>
+          <div class="ptype"><div class="seg" role="radiogroup" aria-label="Post type"><label><input type="radio" name="ptype" value="summary" checked> Paper summary</label><label><input type="radio" name="ptype" value="revision"> Revision notes (medical)</label></div><p class="hint" id="ptHint"></p></div>
           <div class="car">
             <canvas class="big" id="bigSlide" width="1080" height="1350" aria-label="Selected slide preview"></canvas>
             <div class="strip" id="strip"></div>

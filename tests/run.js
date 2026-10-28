@@ -38,6 +38,21 @@ const has = (arr, re) => (arr || []).some(x => re.test(typeof x === 'string' ? x
     check('narrative review', `${f}: read as review`, m.mode === 'review', m.mode);
     check('narrative review', `${f}: all ${TOPICS[f]} topics found`, (m.topics || []).length === TOPICS[f], (m.topics || []).length);
   }
+  // revision notes (multi-condition ENT review)
+  m = await model('enta.pdf');
+  let rv = P.buildRevision(m);
+  check('revision', 'enta: one recognise/manage slide per condition', rv.filter(s => s.type === 'sheet').length >= (m.topics || []).length, rv.map(s => s.heading).join(' | '));
+  // revision notes (single-topic clinical review)
+  m = await model('clinical.pdf');
+  rv = P.buildRevision(m);
+  const rh = rv.map(s => s.heading).join(' | ');
+  check('revision', 'clinical: cover, sections and source slide', rv[0].type === 'hook' && rv[rv.length - 1].type === 'cite' && rv.length >= 8, rh);
+  check('revision', 'clinical: definition and management found', /Definition/i.test(rh) && /Management/i.test(rh), rh);
+  check('revision', 'clinical: red flags slide', rv.some(s => /red flag/i.test(s.heading)), rh);
+  check('revision', 'clinical: pearls slide', rv.some(s => /pearl/i.test(s.heading)), rh);
+  check('revision', 'clinical: every section slide shows its source', rv.filter(s => s.type === 'sheet').every(s => (s.srcs || []).length), '');
+  check('revision', 'clinical: slides stay short (≤ 60 words)', rv.filter(s => s.type === 'sheet').every(s => P.wc(JSON.stringify(s.cards.map(c => c.blocks)).replace(/"[a-z]+":/g, ' ')) <= 60), '');
+  check('rules', 'clinical heading: "Risk factors"', P.clinHead('Risk Factors') === 'risk', P.clinHead('Risk Factors'));
   // thesis
   m = await model('thesis.pdf');
   check('thesis', 'headings captured', has((m.parts || []).map(p => p.heading), /Problem Statement/), (m.parts || []).map(p => p.heading).join(' | '));

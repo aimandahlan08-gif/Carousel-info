@@ -237,7 +237,8 @@ const P2P = (() => {
       const m = lines[i].text.match(/^key\s?words?\s*[:—–-]?\s*(.*)$/i);
       if (m) {
         let s = m[1];
-        if (!/\.\s*$/.test(s) && lines[i + 1] && lines[i + 1].text.length < 90 && !classify(lines[i + 1].text)) s += ' ' + lines[i + 1].text;
+        const nx = lines[i + 1];
+        if (!/\.\s*$/.test(s) && nx && nx.text.length < 90 && !classify(nx.text) && !nx.bold && nx.size <= lines[i].size * 1.05) s += ' ' + nx.text;
         keywords = s.split(/\s*[,;·•|]\s*/).map(k => k.replace(/\.$/, '').trim()).filter(k => k && k.length < 50).slice(0, 8);
         break;
       }
@@ -277,7 +278,7 @@ const P2P = (() => {
       }
       if (cur === 'skip') continue;
       if (/^key\s?words?\s*[:—–-]/i.test(t)) { skipKw = !/\.$/.test(t); continue; }
-      if (skipKw) { skipKw = false; if (t.length < 90 && !/\.\s/.test(t)) continue; }
+      if (skipKw) { skipKw = false; if (t.length < 90 && !/\.\s/.test(t) && !l.bold && l.size <= body * 1.05) continue; }
       // inline heading such as "Introduction: Ear, nose and throat emergencies are..."
       const inl = t.match(/^([A-Za-z][A-Za-z &]{2,40}?)\s*[:.—–]\s+(\S.{15,})$/);
       if (inl) {
@@ -1358,6 +1359,101 @@ const P2P = (() => {
     return { eyebrow, subtitle, stats: statsOut, cards, refs: st.refs || [] };
   }
 
+  // ---- revision notes: a high-yield topic carousel for medical students ----
+  // clinical sections in teaching order; head = heading words, cue = words that mark a sentence as belonging here
+  const CLIN = [
+    { key: 'def', label: 'Definition', head: /^(definition|overview|introduction|what is|background|epidemiolog)/, cue: /\b(is (a|an|the) (common |serious |acute |chronic )?\w*\s?(inflammation|infection|condition|disease|disorder|emergency)|is defined as|refers to|lifetime risk|incidence|prevalence|commonest|most common)\b/i, tone: 'light' },
+    { key: 'aet', label: 'Aetiology', head: /aetiolog|etiolog|^causes?\b|microbiolog|pathogens?|organisms?/, cue: /\b(caused by|is due to|bacteri\w*|virus|viral|organisms?|most often caused|commonest cause|causes include)\b/i, tone: 'light' },
+    { key: 'risk', label: 'Risk factors', head: /risk factor|predispos/, cue: /\b(risk factors?|increases? (the )?risk|is the main risk|more common in|predispos)\b/i, tone: 'light' },
+    { key: 'path', label: 'Pathophysiology', head: /pathophysiolog|pathogenesis|mechanism/, cue: /\b(leads? to|results? in|impairs?|build-up|invade|ischaemi)/i, tone: 'outline', flow: true },
+    { key: 'hx', label: 'History', head: /^(history|symptoms?|clinical (features?|presentation)|presentation)/, cue: /\b(present(s)? with|presentation|symptoms?|anorexia|nausea|vomiting|otalgia|cough|headache|fever)\b/i, tone: 'light' },
+    { key: 'ex', label: 'Examination', head: /^(examination|clinical signs?|signs?|physical)/, cue: /\b(on examination|examination (shows|reveals|finds)|tenderness|guarding|\w+'s sign|sign is|bulging|rash|murmur|palpable)\b/i, tone: 'light' },
+    { key: 'ix', label: 'Investigations', head: /^(investigat|diagnosis$|diagnostic|work-?up|tests?$|imaging)/, cue: /\b(blood tests?|white cell|C-reactive|CRP|ultrasound|CT\b|MRI|X-ray|culture|biopsy|pregnancy test|scor(e|ing system)|audiometry|tympanometry|ECG)\b/i, tone: 'light' },
+    { key: 'mx', label: 'Management', head: /manag|treat|therap/, cue: /\b(treat(ed|ment)?|managed?|management|antibiotics?|analgesia|surgery|surgical|appendicectomy|resuscitat\w*|admit|nil by mouth|fluids?)\b/i, tone: 'outline' },
+    { key: 'cx', label: 'Complications', head: /complicat/, cue: /\b(complications?|perforat\w*|abscess|peritonitis|meningitis)\b/i, tone: 'light' },
+    { key: 'red', label: 'Red flags', head: /red flag|warning sign|when to refer|urgent/, cue: /\b(urgent(ly)?|immediate(ly)?|life-threatening|refer(ral|red)? (urgently|immediately)|needs? urgent|emergency|sepsis)\b/i, tone: 'warn' },
+    { key: 'ddx', label: 'Differentials', head: /differential/, cue: /\b(differential|must be excluded|exclude|mimics?)\b/i, tone: 'light' },
+    { key: 'prev', label: 'Prevention', head: /prevent|vaccin|screening/, cue: /\b(prevent\w*|vaccin\w*|reduces? the risk)\b/i, tone: 'light' },
+    { key: 'pearl', label: 'High-yield pearls', head: /key points?|pearls?|summary|take[- ]home|high[- ]yield|conclusions?/, cue: null, tone: 'dark' },
+  ];
+  // match headings in an order where specific words win ("differential diagnosis" before "diagnosis")
+  const HEAD_ORDER = ['ddx', 'red', 'pearl', 'cx', 'prev', 'mx', 'ix', 'ex', 'hx', 'path', 'risk', 'aet', 'def'];
+  function clinHead(h) { const n = normHeading(h); for (const k of HEAD_ORDER) { const c = CLIN.find(x => x.key === k); if (c.head.test(n)) return k; } return null; }
+  function clinCue(text) { for (const c of CLIN) if (c.cue && c.cue.test(text)) return c.key; return null; }
+  const SPECIALTY = [[/\b(ear|otitis|tympanic|nose|nasal|epistaxis|throat|tonsil|laryn|sinus|ENT)\b/i, 'ENT'], [/\b(heart|cardiac|myocard|coronary|arrhythm|atrial)\b/i, 'Cardiology'], [/\b(lung|asthma|pneumon|bronch|COPD|respirat)\b/i, 'Respiratory'], [/\b(kidney|renal|nephr|urinary)\b/i, 'Renal'], [/\b(diabet|thyroid|adrenal|insulin|endocrin)\b/i, 'Endocrine'], [/\b(pregnan|obstetric|gynae|ovar|uter)\w*/i, 'O&G'], [/\b(stroke|seizure|epilep|neurolog|migraine|dementia)\b/i, 'Neurology'], [/\b(depress|anxiety|psychos|schizo|bipolar|psychiatr)\w*/i, 'Psychiatry'], [/\b(fracture|bone|joint|orthop)\w*/i, 'Orthopaedics'], [/\b(appendic|bowel|abdom|hernia|cholecyst|surgical)\w*/i, 'Surgery'], [/\b(liver|hepat|gastr|coeli|crohn|colitis)\w*/i, 'Gastroenterology'], [/\b(skin|rash|eczema|psoria|dermat)\w*/i, 'Dermatology'], [/\b(child|infant|neonat|paediatr)\w*/i, 'Paediatrics']];
+  // "Rebound tenderness and guarding suggest ..." -> bold the subject so the bullet can be skimmed
+  function boldSubject(t, kws) {
+    if (/\*/.test(t)) return t;
+    const m2 = t.match(/^(.{3,46}?)\s+(is|are|was|were|include|includes|causes?|suggests?|show|shows|needs?|must|may|can|should|leads?|usually|often|follows?)\b/);
+    const subj = m2 && m2[1];
+    const weak = /^(the|a|an|this|these|those|it|they|there|other|others|rare|some|many|most|patients?|examination|management|treatment|initial|always|signs?)\b/i;
+    if (subj && wc(subj) <= 6 && !weak.test(subj) && !/\b(and|or|of|with|the|a|in|to)$/i.test(subj) && !/\b(impairs?|invades?|leads?|causes?|results?)\b/i.test(subj)) return `**${subj}**${t.slice(subj.length)}`;
+    return boldKey(t, kws);
+  }
+  function buildRevision(m) {
+    const kws = (m.keywords || []).slice(0, 6), st = buildStory(m);
+    const topic = String(m.title || 'This topic').split(/\s*[:—–]\s+|\s+-\s+/)[0].trim();
+    const allText = [...(m.parts || []).map(p => p.text), ...Object.values(m.sections).map(x => x.text)].join(' ');
+    const abbr = (allText.match(new RegExp(`${topic.split(/\s+/).slice(-1)[0]}[^()]{0,40}\\(([A-Z]{2,6})\\)`)) || [])[1] || '';
+    const spec = (SPECIALTY.find(([re]) => re.test(m.title + ' ' + kws.join(' '))) || [null, 'Clinical'])[1];
+    const parts = (m.parts || []).filter(p => !/^(abstract|references?|keywords?|acknowledg)/i.test(p.heading));
+    const buckets = {}; CLIN.forEach(c => { buckets[c.key] = { from: null, items: [] }; });
+    const add = (k, text, where, page, byHead) => { const b = buckets[k]; if (b.items.some(x => x.text === text)) return; if (byHead && !b.from) b.from = { heading: where, page }; b.items.push({ text, where, page, byHead }); };
+    const headed = new Set();
+    parts.forEach(p => { const k = clinHead(p.heading); if (k) { headed.add(k); splitSentences(p.text).filter(x => wc(x) >= 4).forEach(x => add(k, x, p.heading, p.page, true)); } });
+    const unheaded = [...parts.filter(p => !clinHead(p.heading)), ...((m.sections.abstract && !parts.length) ? [{ heading: 'Abstract', text: m.sections.abstract.text }] : [])];
+    const looseSents = [...unheaded.flatMap(p => splitSentences(p.text).map(x => ({ x, p }))), ...(headed.size < 3 ? Object.values(m.sections).flatMap(sec => splitSentences(sec.text).map(x => ({ x, p: { heading: LABELS[sec.key] || sec.heading } }))) : [])];
+    looseSents.forEach(({ x, p }) => { if (wc(x) < 5) return; const k = clinCue(x); if (k && !headed.has(k)) add(k, x, p.heading, p.page, false); });
+    // red flags can also come from the management and complications sections
+    if (!headed.has('red')) ['mx', 'cx', 'ix', 'ex', 'hx'].forEach(k => buckets[k].items.forEach(it => { if (CLIN.find(c => c.key === 'red').cue.test(it.text) && buckets.red.items.length < 4) add('red', it.text, it.where, it.page, false); }));
+    if (!buckets.pearl.items.length) (st.items || []).forEach(it => add('pearl', it.text, 'Summary', null, false));
+    const S2 = t => shorten(t, 16).replace(/\s*…$/, '');
+    const bullets = (k, n = 4) => buckets[k].items.slice(0, n).map(it => boldSubject(S2(it.text), kws));
+    const slides = [];
+    const mk = (label, cards, srcItems, role) => slides.push({ id: id('s'), rev: true, role: role || 'rev', type: 'sheet', label, heading: label, cards, srcs: (srcItems || []).slice(0, 2).map(it => ({ text: it.text, where: [it.where, it.page ? 'page ' + it.page : ''].filter(Boolean).join(', ') })) });
+    const many = (m.topics || []).length >= 3 && headed.size < 3;
+    if (many) {
+      // a review of several conditions: overview, one slide per condition ("recognise" and "manage"), red flags, pearls
+      const URG = /\b(urgent(ly)?|immediately|life-threatening|true emergency|must be (removed|referred|seen)|without delay|airway compromise)\b/i;
+      const ov = splitSentences(sentencesUpTo(st.question, 40)).filter(x => wc(x) >= 5);
+      if (ov.length) mk('Overview', [{ tone: 'light', title: '', blocks: [{ k: 'ul', items: ov.slice(0, 3).map(x => boldSubject(S2(x), kws)) }] }], ov.map(t => ({ text: t, where: 'Introduction' })), 'rev-def');
+      const allRed = [];
+      (m.topics || []).slice(0, 8).forEach(tp => {
+        const ss = (tp.ranked || []).map(x => x.text);
+        const rec = ss.filter(x => /\b(present|symptom|sign|tenderness|fever|pain|stridor|drool|bleed|defined as|is a|are common)\w*/i.test(x)).slice(0, 3);
+        const man = (tp.steps || []).length ? null : ss.filter(x => CLIN.find(c => c.key === 'mx').cue.test(x) && !rec.includes(x)).slice(0, 3);
+        const red = ss.filter(x => URG.test(x) && !rec.includes(x) && !(man || []).includes(x)).slice(0, 1);
+        red.forEach(x => allRed.push({ text: x, where: tp.heading, page: tp.page }));
+        const cards = [{ tone: 'light', title: 'Recognise', blocks: [{ k: 'ul', items: (rec.length ? rec : ss.slice(0, 2)).map(x => boldSubject(S2(x), kws)) }] }];
+        if ((tp.steps || []).length) cards.push({ tone: 'outline', title: 'Manage', blocks: [{ k: 'flow', vertical: true, steps: tp.steps.slice(0, 5).map((x, i, a) => ({ title: x, text: '', tone: i === a.length - 1 ? 'accent' : '' })) }] });
+        else if (man && man.length) cards.push({ tone: 'outline', title: 'Manage', blocks: [{ k: 'ul', items: man.map(x => boldSubject(S2(x), kws)) }] });
+        if (red.length) cards.push({ tone: 'warn', title: 'Red flag', blocks: [{ k: 'p', text: boldSubject(S2(red[0]), kws) }] });
+        mk(tp.heading.replace(/^[^:]+:\s*/, x => x.length < 22 ? '' : x) || tp.heading, cards, ss.slice(0, 1).map(t => ({ text: t, where: tp.heading, page: tp.page })));
+      });
+      if (allRed.length >= 2) mk('Red flags', [{ tone: 'warn', title: '', blocks: [{ k: 'ul', items: allRed.slice(0, 5).map(x => boldSubject(S2(x.text), kws)) }] }], allRed, 'rev-red');
+      if ((st.items || []).length) mk('High-yield pearls', [{ tone: 'dark', title: '', blocks: [{ k: 'ul', items: st.items.slice(0, 4).map(x => boldSubject(S2(x.text), kws)) }] }], st.items.map(x => ({ text: x.text, where: 'Key points' })), 'rev-pearl');
+    } else {
+      const has = k => buckets[k].items.length > 0, words = k => buckets[k].items.slice(0, 4).reduce((a, it) => a + wc(S2(it.text)), 0);
+      const card = k => { const c = CLIN.find(x => x.key === k); return { tone: c.tone, title: '', blocks: [c.flow ? { k: 'flow', vertical: true, steps: buckets[k].items.slice(0, 4).map((it, i, a) => ({ title: '', text: boldSubject(S2(it.text), kws), tone: i === a.length - 1 ? 'accent' : '' })) } : { k: 'ul', items: bullets(k) }] }; };
+      const PAIRS = { aet: 'risk', hx: 'ex', ddx: 'prev' };
+      const done = new Set();
+      for (const c of CLIN) {
+        if (done.has(c.key) || !has(c.key)) continue;
+        const partner = PAIRS[c.key];
+        if (partner && has(partner) && words(c.key) + words(partner) <= 64) {
+          const a = card(c.key), b = card(partner); a.title = c.label; b.title = CLIN.find(x => x.key === partner).label;
+          mk(c.key === 'hx' ? 'Clinical features' : `${c.label} and ${CLIN.find(x => x.key === partner).label.toLowerCase()}`, [a, b], [...buckets[c.key].items, ...buckets[partner].items], 'rev-' + c.key);
+          done.add(c.key); done.add(partner); continue;
+        }
+        mk(c.label, [card(c.key)], buckets[c.key].items, 'rev-' + c.key); done.add(c.key);
+      }
+    }
+    const contents = slides.map(x => x.label);
+    const cover = { id: id('s'), rev: true, role: 'hook', type: 'hook', label: 'Revision notes', heading: topic, hooks: [topic, `${topic}: high-yield revision`, `${topic} in ${slides.length} slides`], hookIndex: 0, body: abbr ? `${abbr} · high-yield revision` : 'High-yield revision', eyebrow: `${spec} · Medical student revision`, contents };
+    const cite = { id: id('s'), rev: true, role: 'cite', type: 'cite', label: 'Source', heading: 'Revise from the source', body: 'Revision aid for medical students. Not a substitute for local clinical guidelines. Save this for exam week and share it with your study group.' };
+    return [cover, ...slides, cite];
+  }
+
   function buildReviewPoster(m) {
     const join = (arr, n, per) => arr.slice(0, n).sort((a, b) => a.order - b.order).map(x => shorten(x.text, per)).join(' ');
     const intro = pool(m, ['abstract', 'introduction'], { decay: 0.1 });
@@ -1565,6 +1661,6 @@ const P2P = (() => {
     };
   }
 
-  return { buildSheet, boldKey, buildTalk, factCheck, studyContext, chartFor, numTokens, toQuestion, objectivesIn, OUTLINES, talkSeconds, speak, buildStory, buildBillboard, detectPrisma, _orderPage: orderPage, extractLines, buildModel, buildSlides, buildPoster, cheatFrom, hookOptions, ctaFor, AUD, topicNoun, findStats, shorten, cleanSentence, wc, shortCite, LABELS, ORDER, STAT_RE, splitSentences };
+  return { buildRevision, clinHead, clinCue, buildSheet, boldKey, buildTalk, factCheck, studyContext, chartFor, numTokens, toQuestion, objectivesIn, OUTLINES, talkSeconds, speak, buildStory, buildBillboard, detectPrisma, _orderPage: orderPage, extractLines, buildModel, buildSlides, buildPoster, cheatFrom, hookOptions, ctaFor, AUD, topicNoun, findStats, shorten, cleanSentence, wc, shortCite, LABELS, ORDER, STAT_RE, splitSentences };
 })();
 if (typeof module !== 'undefined') module.exports = P2P;

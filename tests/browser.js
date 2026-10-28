@@ -18,6 +18,17 @@ const MAP = [
   [/@tesseract\.js-data\/eng@1\.0\.0\/4\.0\.0_best_int\/(.+)$/, m => NM('@tesseract.js-data/eng/4.0.0_best_int/' + m[1])],
 ];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function go(page, t) {
+  if (t === 'extracted') {
+    // after a new upload the app shows the start screen; pick an output first, as a user would
+    if (await page.isVisible('#vHome')) { await page.click('.pick-mode[data-mode="social"]'); await sleep(300); }
+    await page.click('#fcBadge'); await sleep(300); return;
+  }
+  if (await page.isVisible('#checkModal')) await page.click('#checkClose');
+  const m = { carousel: ['social', 1], poster: ['poster', 1], talk: ['talk', 1], kit: ['social', 3] }[t];
+  await page.click(`.mode[data-mode="${m[0]}"]`); await sleep(100);
+  if (await page.isVisible(`#steps [data-step="${m[1]}"]`)) await page.click(`#steps [data-step="${m[1]}"]`); await sleep(100);
+}
 (async () => {
   const srv = http.createServer((q, r) => { const f = path.join(ROOT, decodeURIComponent(q.url.split('?')[0])); if (fs.existsSync(f) && fs.statSync(f).isFile()) { r.writeHead(200, { 'content-type': f.endsWith('.html') ? 'text/html; charset=utf-8' : 'application/octet-stream' }); fs.createReadStream(f).pipe(r); } else { r.writeHead(404); r.end(); } }).listen(8765);
   const browser = await chromium.launch();
@@ -39,18 +50,20 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       window.claude = { use: async n => n === 'downloads' ? { save: async ({ filename, data }) => { const size = data.size || data.byteLength || data.length; window.__saved.push({ filename, size }); return { status: 'saved' }; } } : null };
     });
     await page.goto('http://localhost:8765/paper2poster.html');
-    await page.waitForSelector('#strip .thumb');
+    await page.waitForSelector('#vHome:not([hidden])');
     return page;
   }
   const page = await newPage({ width: 1440, height: 900 });
-  ok('boots with the example paper', await page.locator('#strip .thumb').count() > 5);
+  ok('boots on the start screen', await page.isVisible('#vHome'));
+  await page.click('.pick-mode[data-mode="social"]'); await sleep(200);
+  ok('social post opens with slides', await page.locator('#strip .thumb').count() > 5);
   // upload thesis
   await page.setInputFiles('#pdfInput', path.join(__dirname, 'fixtures/thesis.pdf'));
   await page.waitForFunction(() => /Anthropomorphism/.test(document.querySelector('#mTitle').value), null, { timeout: 30000 });
   ok('thesis PDF read in the browser', true, await page.inputValue('#mTitle'));
   ok('model built in a background worker', await page.evaluate(() => typeof Worker !== 'undefined' && !!document.querySelector('#coreSrc')));
   // talk tab, thesis outline
-  await page.click('.tab[data-tab="talk"]'); await sleep(300);
+  await go(page, 'talk'); await sleep(300);
   await page.selectOption('#tType', 'thesis'); await sleep(500);
   ok('thesis outline built', await page.locator('#tStrip .thumb').count() >= 17, await page.locator('#tStrip .thumb').count() + ' slides');
   await page.screenshot({ path: path.join(OUT, 'b_talk_desktop.png') });
@@ -59,22 +72,23 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await page.keyboard.press('ArrowRight'); await sleep(200);
   await page.screenshot({ path: path.join(OUT, 'b_rehearse.png') });
   await page.keyboard.press('Escape');
-  // exports
-  for (const x of ['pptx', 'talkpdf', 'script', 'zip', 'poster', 'lipdf', 'ga']) {
-    await page.click('#exportBtn'); await page.click(`#exportMenu [data-x="${x}"]`);
-    await page.waitForFunction(n => window.__saved.length >= n, (await page.evaluate(() => window.__saved.length)) + 1, { timeout: 120000 }).catch(() => {});
-  }
-  // video (WebCodecs)
-  await page.click('#exportBtn'); await page.click('#exportMenu [data-x="video45"]');
-  await page.waitForFunction(() => window.__saved.some(f => /carousel-4x5/.test(f.filename)), null, { timeout: 240000 }).catch(() => {});
+  // exports from step 3 (Download) of each mode
+  await page.click('#dlBtn'); await sleep(300);
+  await page.screenshot({ path: path.join(OUT, 'b_download_talk.png') });
+  const dl = async x => { await page.click(`#dlList [data-dl="${x}"]`); await page.waitForFunction(n => window.__saved.length >= n, (await page.evaluate(() => window.__saved.length)) + 1, { timeout: 240000 }).catch(() => {}); };
+  for (const x of ['pptx', 'talkpdf', 'script']) await dl(x);
+  await page.click('.mode[data-mode="poster"]'); await sleep(200); await page.click('#dlBtn'); await sleep(200); await dl('poster');
+  await page.click('.mode[data-mode="social"]'); await sleep(200); await page.click('#dlBtn'); await sleep(300);
+  await page.screenshot({ path: path.join(OUT, 'b_download_social.png') });
+  for (const x of ['zip', 'lipdf', 'ga', 'video45']) await dl(x);
   const saved = await page.evaluate(() => window.__saved);
   ok('exports produced files', saved.length >= 8, saved.map(f => `${f.filename.replace(/^.*?-(talk|speaker|carousel|poster|linkedin|graphical)/, '$1')} ${Math.round(f.size / 1024)} KB`).join(', '));
   ok('video encoded (WebCodecs or MediaRecorder)', saved.some(f => /carousel-4x5\.(mp4|webm)$/.test(f.filename) && f.size > 20000), (saved.find(f => /carousel-4x5/.test(f.filename)) || {}).filename);
   // fact check panel
-  await page.click('.tab[data-tab="extracted"]'); await sleep(400);
-  ok('fact check panel shows', await page.isVisible('.card.fc'), await page.locator('.card.fc .chip').allTextContents().then(a => a.join(' | ')));
+  await go(page, 'extracted'); await sleep(400);
+  ok('fact check panel shows', await page.isVisible('#checkModal .card.fc'), await page.locator('.card.fc .chip').allTextContents().then(a => a.join(' | ')));
   // reload: project restored from IndexedDB
-  await page.reload(); await page.waitForSelector('#strip .thumb'); await sleep(800);
+  await page.reload(); await page.waitForSelector('#mTitle', { state: 'attached' }); await sleep(1200);
   ok('project restored after reload (IndexedDB)', /Anthropomorphism/.test(await page.inputValue('#mTitle')));
   ok('IndexedDB holds the project', await page.evaluate(() => new Promise(res => { const r = indexedDB.open('paper2poster', 1); r.onsuccess = () => { const q = r.result.transaction('kv').objectStore('kv').get('paper2poster-v1'); q.onsuccess = () => res(!!(q.result && q.result.model && q.result.model.pageText && q.result.model.pageText.length)); q.onerror = () => res(false); }; r.onerror = () => res(false); })));
   // scanned PDF -> OCR
@@ -85,12 +99,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await page.waitForFunction(() => /Smartphone|Bedtime|Sleep/i.test(document.querySelector('#mTitle').value), null, { timeout: 240000 }).catch(() => {});
   const ocrTitle = await page.inputValue('#mTitle'), ocrSecs = await page.evaluate(() => document.querySelectorAll('#ex .card').length);
   ok('OCR read the scanned paper', /Smartphone|Bedtime|Sleep/i.test(ocrTitle), ocrTitle);
-  await page.click('.tab[data-tab="extracted"]'); await sleep(300);
+  await go(page, 'extracted'); await sleep(300);
   ok('OCR text produced sections', await page.locator('#ex .card h3 .k').count() >= 3, (await page.locator('#ex .card h3 .k').allTextContents()).join(', '));
   // mobile
   const mob = await newPage({ width: 390, height: 844 });
+  await mob.screenshot({ path: path.join(OUT, 'b_mobile_home.png'), fullPage: false });
+  await mob.click('.pick-mode[data-mode="social"]'); await sleep(300);
   await mob.screenshot({ path: path.join(OUT, 'b_mobile_carousel.png'), fullPage: false });
-  await mob.click('.tab[data-tab="talk"]'); await sleep(400);
+  await go(mob, 'talk'); await sleep(400);
   await mob.screenshot({ path: path.join(OUT, 'b_mobile_talk.png'), fullPage: true });
   const overflow = await mob.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   ok('mobile: no sideways scrolling', !overflow, overflow ? document.documentElement.scrollWidth : '');

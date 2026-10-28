@@ -43,7 +43,8 @@ results, discussion, conclusion, limitations), each with ranked sentences and de
 a figure library. Poster and carousel both render from this model.
 
 ## Design rules
-- Themes: Clean Academic, Bold Editorial, Soft Pastel, Dark Tech. Every colour, font, radius comes from tokens.
+- Themes: Study Sheet (default), Clean Academic, Bold Editorial, Soft Pastel, Dark Tech. Every colour, font, radius comes from tokens.
+- Study Sheet style (default poster layout and carousel look): bold serif numbered headings ("1 · Background"), Inter body text, a spaced caps label above the title, number chips beside the title, and card types: light, outlined (method flow with arrows), dark highlight, coral warning, key message, finding cards with icons, and tables with a dark header. Key terms are bold inside sentences (**double stars**).
 - Carousel: 1080x1350 px (4:5). Max ~40 words per slide. Slide counter + swipe arrow on every slide but the last.
 - Carousel blueprint: hook, problem, method, sample (big number), key finding 1 (biggest stat, huge type),
   key finding 2, why it matters, limitations, citation + DOI QR + call to action.

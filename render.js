@@ -10,6 +10,10 @@ const R = (() => {
     pastel: { name: 'Soft Pastel', bg: '#F4EFFC', surface: '#FFFFFF', ink: '#2A2546', muted: '#5A5480', accent: '#6544C9', soft: '#E9E1FB', onAccent: '#FFFFFF', line: '#DCD3F2', blobA: '#FBC9D6', blobB: '#C6EBDC',
       banner: '#6544C9', bannerInk: '#FFFFFF', bannerSub: '#E4DBFF',
       display: { family: 'DM Serif Display', weight: 400, fb: 'Georgia, serif' }, body: { family: 'Nunito Sans', weight: 400, bold: 700, fb: 'Helvetica, Arial, sans-serif' }, mono: { family: 'Nunito Sans', weight: 700, fb: 'Helvetica, sans-serif' }, radius: 36, deco: 'pastel' },
+    sheet: { name: 'Study Sheet', bg: '#FFFFFF', surface: '#EEF4F5', ink: '#17262B', muted: '#4F646B', accent: '#0B5566', soft: '#E3EFF1', onAccent: '#FFFFFF', line: '#D3E0E3', blobA: '#E3EFF1', blobB: '#FCE8E6',
+      head: '#0B3B4A', warn: '#B42318', warnSoft: '#FCE8E6', dark: '#0B3B4A', darkInk: '#FFFFFF', darkSub: '#B7D2D8',
+      banner: '#0B3B4A', bannerInk: '#FFFFFF', bannerSub: '#B7D2D8',
+      display: { family: 'Source Serif 4', weight: 700, fb: 'Georgia, "Times New Roman", serif' }, body: { family: 'Inter', weight: 400, bold: 600, fb: 'Helvetica, Arial, sans-serif' }, mono: { family: 'Inter', weight: 600, fb: 'Helvetica, Arial, sans-serif' }, radius: 12, deco: 'sheet' },
     tech: { name: 'Dark Tech', bg: '#0D1117', surface: '#161C26', ink: '#E8EEF5', muted: '#A3B1C2', accent: '#5CC8FF', soft: '#13283A', onAccent: '#0D1117', line: '#2A3445', accent2: '#FFB454',
       banner: '#161C26', bannerInk: '#E8EEF5', bannerSub: '#A3B1C2',
       display: { family: 'Sora', weight: 700, fb: 'Helvetica, Arial, sans-serif' }, body: { family: 'Manrope', weight: 400, bold: 600, fb: 'Helvetica, Arial, sans-serif' }, mono: { family: 'JetBrains Mono', weight: 500, fb: 'Menlo, monospace' }, radius: 10, deco: 'tech' },
@@ -33,9 +37,11 @@ const R = (() => {
   // ---- text layout ----
   function tokens(text) {
     // *word* marks emphasis (drawn in the accent colour); the asterisks themselves are not drawn
-    const ranges = []; let clean = '';
-    String(text || '').split(/(\*[^*\n]+\*)/).forEach(part => {
-      if (/^\*[^*\n]+\*$/.test(part)) { ranges.push([clean.length, clean.length + part.length - 2]); clean += part.slice(1, -1); } else clean += part;
+    // **word** is bold, *word* is emphasis colour
+    const ranges = [], bolds = []; let clean = '';
+    String(text || '').split(/(\*\*[^*\n]+\*\*|\*[^*\n]+\*)/).forEach(part => {
+      if (/^\*\*[^*\n]+\*\*$/.test(part)) { bolds.push([clean.length, clean.length + part.length - 4]); clean += part.slice(2, -2); }
+      else if (/^\*[^*\n]+\*$/.test(part)) { ranges.push([clean.length, clean.length + part.length - 2]); clean += part.slice(1, -1); } else clean += part;
     });
     text = clean;
     if (typeof P2P !== 'undefined') { P2P.STAT_RE.lastIndex = 0; let m; while ((m = P2P.STAT_RE.exec(text))) ranges.push([m.index, m.index + m[0].length]); }
@@ -43,16 +49,17 @@ const R = (() => {
     while ((m = re.exec(text))) {
       if (m[0] === '\n') { out.push({ br: true }); continue; }
       const a = m.index, b = a + m[0].length;
-      out.push({ t: m[0], hl: ranges.some(([x, y]) => a < y && b > x) });
+      out.push({ t: m[0], hl: ranges.some(([x, y]) => a < y && b > x), b: bolds.some(([x, y]) => a < y && b > x) });
     }
     return out;
   }
-  function wrap(ctx, toks, maxW) {
+  function wrap(ctx, toks, maxW, boldFont) {
     const lines = []; let line = [], w = 0, widest = 0;
-    const sp = ctx.measureText(' ').width;
+    const sp = ctx.measureText(' ').width, reg = ctx.font;
     for (const tk of toks) {
       if (tk.br) { lines.push({ words: line, w }); line = []; w = 0; continue; }
-      const tw = ctx.measureText(tk.t).width;
+      let tw;
+      if (tk.b && boldFont) { ctx.font = boldFont; tw = ctx.measureText(tk.t).width; ctx.font = reg; } else tw = ctx.measureText(tk.t).width;
       if (line.length && w + sp + tw > maxW) { lines.push({ words: line, w }); line = []; w = 0; }
       line.push({ ...tk, w: tw }); w += (line.length > 1 ? sp : 0) + tw; widest = Math.max(widest, w);
     }
@@ -66,16 +73,17 @@ const R = (() => {
     let res;
     for (let s = o.max; s >= o.min; s -= step) {
       ctx.font = fontStr(font, s, o.weight);
-      const r = wrap(ctx, toks, box.w);
+      const r = wrap(ctx, toks, box.w, fontStr(font, s, font.bold || 700));
       const h = r.lines.length * s * o.lh;
       res = { size: s, ...r, h, ok: h <= box.h + 0.5 && r.widest <= box.w + 1 && (!o.maxLines || r.lines.length <= o.maxLines) };
       if (res.ok) return res;
     }
     return res;
   }
-  function measureAt(ctx, text, font, w, s, lh, weight) { ctx.font = fontStr(font, s, weight); const r = wrap(ctx, tokens(text || ''), w); return { size: s, ...r, h: r.lines.length * s * lh }; }
+  function measureAt(ctx, text, font, w, s, lh, weight) { ctx.font = fontStr(font, s, weight); const r = wrap(ctx, tokens(text || ''), w, fontStr(font, s, font.bold || 700)); return { size: s, ...r, h: r.lines.length * s * lh }; }
   function drawText(ctx, res, font, x, y, o) {
-    ctx.font = fontStr(font, res.size, o.weight);
+    const regF = fontStr(font, res.size, o.weight), boldF = fontStr(font, res.size, font.bold || 700);
+    ctx.font = regF;
     ctx.textBaseline = 'alphabetic';
     const lh = res.size * o.lh;
     res.lines.forEach((ln, i) => {
@@ -86,7 +94,8 @@ const R = (() => {
       let cx = o.align === 'center' ? x + (o.w - ln.w) / 2 : o.align === 'right' ? x + o.w - ln.w : x;
       const by = y + i * lh + res.size * 0.86 + (lh - res.size) * 0.35;
       for (const wd of ln.words) {
-        ctx.fillStyle = wd.hl && o.hl ? o.hl : o.color;
+        ctx.fillStyle = wd.hl && o.hl ? o.hl : wd.b && o.bc ? o.bc : o.color;
+        ctx.font = wd.b ? boldF : regF;
         ctx.fillText(wd.t, cx, by);
         cx += wd.w + res.sp;
       }
@@ -230,6 +239,7 @@ const R = (() => {
   // ---- slide ----
   // tt = seconds since the slide appeared (undefined = finished, static image)
   function renderSlide(cv, s, i, n, T, ctxData, tt) {
+    if (T.deco === 'sheet') return renderSheetSlide(cv, s, i, n, T, ctxData);
     const W = 1080, H = 1350, P = 92;
     const ctx = cv.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1436,6 +1446,300 @@ const R = (() => {
     return done();
   }
 
+  // ---- study sheet: cards in the style of a clinical revision sheet ----
+  // works with any theme; the Study Sheet theme gives the teal, serif-and-Inter look
+  function sheetColors(T) {
+    const dark = T.dark || (T.deco === 'tech' ? T.accent : T.banner);
+    return {
+      head: T.head || (T.deco === 'editorial' ? T.ink : T.deco === 'tech' ? T.accent : T.banner === T.bg ? T.accent : T.banner),
+      warn: T.warn || '#B42318', warnSoft: T.warnSoft || (T.deco === 'tech' ? '#3A1C1C' : '#FCE8E6'),
+      dark, darkInk: T.darkInk || (T.deco === 'tech' ? T.onAccent : T.bannerInk), darkSub: T.darkSub || (T.deco === 'tech' ? T.onAccent : T.bannerSub),
+      card: T.surface === T.bg ? T.soft : T.surface, chip: T.soft, keyBg: T.soft,
+    };
+  }
+  // draws (or, with draw=false, only measures) one card; returns its height
+  function sheetCard(ctx, T, c, x, y, w, base, draw, opts = {}) {
+    const C = sheetColors(T), pad = base * 0.95, iw = w - 2 * pad, small = base * 0.84, lh = 1.42;
+    const tone = c.tone || 'light';
+    const ink = tone === 'dark' ? C.darkInk : T.ink, sub = tone === 'dark' ? C.darkSub : T.muted;
+    const headC = tone === 'dark' ? C.darkInk : tone === 'warn' ? C.warn : C.head;
+    const bold = tone === 'dark' ? C.darkInk : (T.deco === 'tech' ? T.ink : C.head);
+    let h = pad;
+    const items = [];
+    // heading "3 · Risk factors"
+    const ht = (c.n ? `${c.n} · ` : '') + (c.title || '');
+    if (ht.trim()) { const r = measureAt(ctx, ht, T.display, iw, base * 1.42, 1.15); items.push(() => drawText(ctx, r, T.display, x + pad, y + h0(0), { lh: 1.15, color: headC })); var hY = h; h += r.h + base * 0.55; }
+    const offs = [hY || 0];
+    function h0(k) { return offs[k]; }
+    const drawers = [];
+    for (const b of c.blocks || []) {
+      const at = h;
+      if (b.k === 'p') {
+        const sz = b.small ? small : base, r = measureAt(ctx, b.text, T.body, iw, sz, lh);
+        drawers.push(() => drawText(ctx, r, T.body, x + pad, y + at, { lh, color: b.small ? sub : ink, bc: bold, hl: tone === 'dark' ? C.darkInk : T.accent }));
+        h += r.h + base * 0.5;
+      } else if (b.k === 'ul') {
+        const ind = base * 1.15;
+        for (const t of b.items) {
+          const r = measureAt(ctx, t, T.body, iw - ind, base, lh), yy = h;
+          drawers.push(() => { ctx.fillStyle = tone === 'dark' ? C.darkInk : tone === 'warn' ? C.warn : C.head; ctx.beginPath(); ctx.arc(x + pad + base * 0.3, y + yy + base * 0.78, base * 0.16, 0, Math.PI * 2); ctx.fill(); drawText(ctx, r, T.body, x + pad + ind, y + yy, { lh, color: ink, bc: bold, hl: tone === 'dark' ? C.darkInk : T.accent }); });
+          h += r.h + base * 0.32;
+        }
+        h += base * 0.2;
+      } else if (b.k === 'big') {
+        ctx.font = fontStr(T.display, base * 3.2); const bw = ctx.measureText(b.big).width, bs = Math.min(base * 3.2, base * 3.2 * iw * 0.6 / Math.max(1, bw));
+        const lr = measureAt(ctx, b.label || '', T.body, iw - bw - base, base, 1.2, T.body.bold);
+        drawers.push(() => { ctx.font = fontStr(T.display, bs); ctx.fillStyle = tone === 'dark' ? C.darkInk : C.head; ctx.fillText(b.big, x + pad, y + at + bs * 0.86); const lw2 = ctx.measureText(b.big).width; drawText(ctx, lr, T.body, x + pad + lw2 + base * 0.6, y + at + bs * 0.86 - lr.h + base * 0.25, { lh: 1.2, color: ink, weight: T.body.bold }); });
+        h += bs * 1.02 + base * 0.45;
+      } else if (b.k === 'flow') {
+        const st = b.steps || [], k = st.length || 1, vertical = b.vertical || iw / k < base * 6.5;
+        if (vertical) {
+          for (let j = 0; j < st.length; j++) {
+            const s0 = st[j], txt = s0.title ? (s0.text ? `**${s0.title}** · ${s0.text}` : `**${s0.title}**`) : s0.text, r = measureAt(ctx, txt, T.body, iw - base * 2.2, base * 0.92, 1.3), ch = r.h + base * 0.7, yy = h;
+            drawers.push(() => { const acc = s0.tone === 'accent'; ctx.fillStyle = acc ? C.head : C.chip; rr(ctx, x + pad, y + yy, iw, ch, base * 0.4); ctx.fill(); ctx.font = fontStr(T.body, base * 0.8, T.body.bold); ctx.fillStyle = acc ? C.darkInk : C.head; ctx.fillText(String(j + 1), x + pad + base * 0.6, y + yy + ch / 2 + base * 0.28); drawText(ctx, r, T.body, x + pad + base * 1.7, y + yy + base * 0.35, { lh: 1.3, color: acc ? C.darkInk : T.ink, bc: acc ? C.darkInk : C.head }); });
+            h += ch + base * 0.3;
+          }
+        } else {
+          const ar = base * 1.4, cw2 = (iw - ar * (k - 1)) / k, ip = base * 0.55;
+          const ms = st.map(s0 => ({ t: measureAt(ctx, s0.title, T.body, cw2 - 2 * ip, base * 0.9, 1.25, T.body.bold), x: s0.text ? measureAt(ctx, s0.text, T.body, cw2 - 2 * ip, base * 0.84, 1.32) : null }));
+          const ch = Math.max(...ms.map(q => q.t.h + (q.x ? q.x.h + base * 0.3 : 0))) + 2 * ip;
+          drawers.push(() => st.forEach((s0, j) => {
+            const cx = x + pad + j * (cw2 + ar), acc = s0.tone === 'accent', warnT = s0.tone === 'warn';
+            ctx.fillStyle = acc ? C.head : warnT ? C.warnSoft : C.chip; rr(ctx, cx, y + at, cw2, ch, base * 0.4); ctx.fill();
+            drawText(ctx, ms[j].t, T.body, cx + ip, y + at + ip, { lh: 1.25, color: acc ? C.darkInk : warnT ? C.warn : C.head, weight: T.body.bold });
+            if (ms[j].x) drawText(ctx, ms[j].x, T.body, cx + ip, y + at + ip + ms[j].t.h + base * 0.3, { lh: 1.32, color: acc ? C.darkInk : T.ink });
+            if (j < k - 1) { const ax = cx + cw2 + ar * 0.22, ay = y + at + ch / 2; ctx.strokeStyle = C.head; ctx.lineWidth = Math.max(2, base * 0.09); ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + ar * 0.56, ay); ctx.moveTo(ax + ar * 0.36, ay - ar * 0.2); ctx.lineTo(ax + ar * 0.56, ay); ctx.lineTo(ax + ar * 0.36, ay + ar * 0.2); ctx.stroke(); }
+          }));
+          h += ch + base * 0.55;
+        }
+      } else if (b.k === 'table') {
+        const head = b.head || [], rows = (b.rows || []).slice(0, 8), nc = Math.max(head.length, ...rows.map(r => r.length), 1);
+        const lens = Array.from({ length: nc }, (_, q) => Math.min(48, Math.max(String(head[q] || '').length, ...rows.map(r => String(r[q] || '').length), 6)));
+        const tot = lens.reduce((a2, b2) => a2 + b2, 0), cws = lens.map(l => iw * l / tot), cp = base * 0.45, eff = { 'Benefit': '#2E7D4F', 'Mixed': '#A35F00', 'No clear effect': '#56616B', 'Risk': '#B3261E' };
+        const hh = base * 1.9;
+        const rm = rows.map(r => r.map((cell, q) => measureAt(ctx, String(cell || ''), T.body, cws[q] - 2 * cp, base * 0.92, 1.3, q ? undefined : T.body.bold)));
+        const rhs = rm.map(r => Math.max(...r.map(q => q.h)) + 2 * cp);
+        drawers.push(() => {
+          ctx.fillStyle = C.head; rr(ctx, x + pad, y + at, iw, hh, base * 0.3); ctx.fill();
+          let cx = x + pad; head.forEach((t, q) => { ctx.font = fontStr(T.body, base * 0.82, T.body.bold); ctx.fillStyle = C.darkInk; ctx.fillText(String(t), cx + cp, y + at + hh * 0.64); cx += cws[q]; });
+          let ry = y + at + hh;
+          rows.forEach((r, k2) => {
+            if (k2) { ctx.fillStyle = T.line; ctx.fillRect(x + pad, ry, iw, Math.max(1.5, base * 0.05)); }
+            let cx2 = x + pad;
+            r.forEach((cell, q) => {
+              const e = eff[cell];
+              if (e && q) { ctx.font = fontStr(T.body, base * 0.8, T.body.bold); const tw = ctx.measureText(cell).width + base, ph = base * 1.35; ctx.fillStyle = e; rr(ctx, cx2 + cp, ry + (rhs[k2] - ph) / 2, tw, ph, ph / 2); ctx.fill(); ctx.fillStyle = '#FFFFFF'; ctx.fillText(cell, cx2 + cp + base * 0.5, ry + rhs[k2] / 2 + base * 0.28); }
+              else drawText(ctx, rm[k2][q], T.body, cx2 + cp, ry + cp, { lh: 1.3, color: q ? (isNaN(parseFloat(String(cell).replace(/[^\d.−-]/g, ''))) ? T.ink : C.head) : T.ink, weight: q ? undefined : T.body.bold });
+              cx2 += cws[q];
+            });
+            ry += rhs[k2];
+          });
+        });
+        h += hh + rhs.reduce((a2, b2) => a2 + b2, 0) + base * 0.5;
+      } else if (b.k === 'stages') {
+        const it = b.items || [], k = it.length || 1, gap = base * 0.9, sw = (iw - gap * (k - 1)) / k, ip = base * 0.8, d = base * 2.6;
+        const ms = it.map(s0 => ({ tag: s0.tag, title: s0.title ? measureAt(ctx, s0.title, T.body, sw - 2 * ip, base, 1.25, T.body.bold) : null, text: measureAt(ctx, s0.text, T.body, sw - 2 * ip, base * 0.9, 1.36) }));
+        const sh = Math.max(...ms.map(q => d + base * 0.8 + base * 1.2 + (q.title ? q.title.h + base * 0.3 : 0) + q.text.h)) + 2 * ip;
+        drawers.push(() => it.forEach((s0, j) => {
+          const sx = x + pad + j * (sw + gap), hl = s0.tone === 'warn';
+          ctx.fillStyle = hl ? C.warnSoft : T.bg === '#FFFFFF' || T.deco === 'sheet' ? '#FFFFFF' : T.surface; rr(ctx, sx, y + at, sw, sh, base * 0.5); ctx.fill();
+          ctx.strokeStyle = hl ? C.warn : T.line; ctx.lineWidth = Math.max(1.5, base * 0.06); rr(ctx, sx, y + at, sw, sh, base * 0.5); ctx.stroke();
+          ctx.fillStyle = C.chip; ctx.beginPath(); ctx.arc(sx + ip + d / 2, y + at + ip + d / 2, d / 2, 0, Math.PI * 2); ctx.fill();
+          icon(ctx, s0.icon || 'bulb', sx + ip + d * 0.22, y + at + ip + d * 0.22, d * 0.56, C.head);
+          let yy = y + at + ip + d + base * 0.8;
+          ctx.save(); ctx.font = fontStr(T.body, base * 0.7, T.body.bold); if ('letterSpacing' in ctx) ctx.letterSpacing = `${base * 0.08}px`; ctx.fillStyle = hl ? C.warn : C.head; ctx.fillText(String(s0.tag || '').toUpperCase(), sx + ip, yy); ctx.restore();
+          yy += base * 0.55;
+          if (ms[j].title) yy += drawText(ctx, ms[j].title, T.body, sx + ip, yy, { lh: 1.25, color: T.ink, weight: T.body.bold }) + base * 0.3;
+          drawText(ctx, ms[j].text, T.body, sx + ip, yy, { lh: 1.36, color: T.ink, bc: C.head, hl: T.accent });
+        }));
+        h += sh + base * 0.5;
+      } else if (b.k === 'fig' && b.img && b.img.width > 0) {
+        const fh = Math.min(iw * b.img.height / b.img.width, base * 14);
+        drawers.push(() => { ctx.fillStyle = '#FFFFFF'; rr(ctx, x + pad, y + at, iw, fh, base * 0.3); ctx.fill(); drawImageContain(ctx, b.img, x + pad, y + at, iw, fh); });
+        h += fh + base * 0.5;
+      }
+    }
+    h += pad - base * 0.45;
+    const H = Math.max(h, opts.minH || 0);
+    if (draw) {
+      ctx.save();
+      const r = base * 0.55;
+      if (tone === 'light') { ctx.fillStyle = C.card; rr(ctx, x, y, w, H, r); ctx.fill(); }
+      else if (tone === 'outline') { ctx.fillStyle = T.bg; rr(ctx, x, y, w, H, r); ctx.fill(); ctx.strokeStyle = T.line; ctx.lineWidth = Math.max(2, base * 0.08); rr(ctx, x, y, w, H, r); ctx.stroke(); }
+      else if (tone === 'dark') { ctx.fillStyle = C.dark; rr(ctx, x, y, w, H, r); ctx.fill(); }
+      else if (tone === 'warn') { ctx.fillStyle = C.warnSoft; rr(ctx, x, y, w, H, r); ctx.fill(); }
+      else if (tone === 'key') { ctx.fillStyle = C.keyBg; rr(ctx, x, y, w, H, r); ctx.fill(); ctx.fillStyle = C.head; rr(ctx, x, y, base * 0.35, H, base * 0.17); ctx.fill(); }
+      ctx.restore();
+      items.forEach(f => f()); drawers.forEach(f => f());
+    }
+    return H;
+  }
+  function sheetStat(ctx, T, st, x, y, w, h, base) {
+    const C = sheetColors(T);
+    ctx.fillStyle = C.card; rr(ctx, x, y, w, h, base * 0.55); ctx.fill();
+    const pad = base * 0.75; let bs = base * 1.9; ctx.font = fontStr(T.body, bs, 700); const bw = ctx.measureText(st.big).width; if (bw > w - 2 * pad) bs *= (w - 2 * pad) / bw;
+    ctx.font = fontStr(T.body, bs, 700); ctx.fillStyle = C.head; ctx.fillText(st.big, x + pad, y + pad + bs * 0.85);
+    const lr = fit(ctx, st.label || '', T.body, { w: w - 2 * pad, h: h - pad * 2 - bs * 1.1 }, { max: base * 0.78, min: base * 0.6, lh: 1.3, maxLines: 3 });
+    drawText(ctx, lr, T.body, x + pad, y + pad + bs * 1.1, { lh: 1.3, color: T.muted });
+  }
+  function eyebrowText(ctx, T, text, x, y, size, color) { ctx.save(); ctx.font = fontStr(T.body, size, 700); if ('letterSpacing' in ctx) ctx.letterSpacing = `${size * 0.14}px`; ctx.fillStyle = color; ctx.fillText(String(text || '').toUpperCase(), x, y); ctx.restore(); }
+  // pack cards into rows of `cols` columns, keeping their order
+  function sheetRows(cards, cols) {
+    const rows = []; let row = [], used = 0;
+    for (const c of cards) {
+      const sp = Math.min(c.span || 1, cols);
+      if (used + sp > cols && row.length) { rows.push(row); row = []; used = 0; }
+      row.push({ c, sp }); used += sp;
+      if (used >= cols) { rows.push(row); row = []; used = 0; }
+    }
+    if (row.length) rows.push(row);
+    rows.forEach(r => { const u = r.reduce((a, b) => a + b.sp, 0); if (u < cols) r[r.length - 1].sp += cols - u; });
+    return rows;
+  }
+  function renderSheetPoster(ctx, P, meta, T, size, figs) {
+    const sh = P.sheet, W = size.w, H = size.h, land = W > H, C = sheetColors(T);
+    const M = W * 0.04, cols = land ? 3 : 2, warn = [], rects = [];
+    const cards = (sh.cards || []).filter(c => !c.hidden).map((c, i) => ({ ...c, n: i + 1, blocks: c.id === sh.figCard && figs[sh.figureId] ? [...c.blocks, { k: 'fig', img: figs[sh.figureId] }] : c.blocks }));
+    if (sh.figureId && figs[sh.figureId] && !sh.figCard) { const fc = cards.find(c => /found|finding|result/i.test(c.title)); if (fc) fc.blocks = [...fc.blocks, { k: 'fig', img: figs[sh.figureId] }]; }
+    const rows = sheetRows(cards, cols);
+    const titleSize = land ? W * 0.029 : W * 0.04;
+    let gapK = 0.9;
+    const layout = base => {
+      const G = base * gapK, colW = (W - 2 * M - G * (cols - 1)) / cols;
+      const hs = rows.map(r => Math.max(...r.map(({ c, sp }) => sheetCard(ctx, T, c, 0, 0, sp * colW + (sp - 1) * G, base, false))));
+      return { G, colW, hs, total: hs.reduce((a, b) => a + b, 0) + G * (rows.length - 1) };
+    };
+    // header
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+    const stats = (sh.stats || []).slice(0, 3), chipW = stats.length ? (land ? W * 0.115 : W * 0.15) : 0, chipG = W * 0.008, chipsW = stats.length ? stats.length * chipW + (stats.length - 1) * chipG : 0;
+    const tw = W - 2 * M - (chipsW ? chipsW + W * 0.03 : 0);
+    const eb = Math.max(22, titleSize * 0.2);
+    const tr = fit(ctx, meta.title, T.display, { w: tw, h: titleSize * 1.12 * 3 }, { max: titleSize, min: Math.max(72, titleSize * 0.6), lh: 1.08, maxLines: 3 });
+    if (!tr.ok) warn.push('The title is long for the header. Shorten it.');
+    const sub = fit(ctx, sh.subtitle || '', T.body, { w: tw, h: titleSize * 0.7 }, { max: titleSize * 0.27, min: 24, lh: 1.3, maxLines: 2 });
+    let y = M * 0.9;
+    if (sh.eyebrow) { eyebrowText(ctx, T, sh.eyebrow, M, y + eb, eb, C.head); y += eb * 2.1; }
+    y += drawText(ctx, tr, T.display, M, y, { lh: 1.08, color: C.head }) + titleSize * 0.18;
+    y += drawText(ctx, sub, T.body, M, y, { lh: 1.3, color: T.muted });
+    const chipH = Math.max(titleSize * 1.45, W * 0.05);
+    stats.forEach((st, i) => sheetStat(ctx, T, st, W - M - chipsW + i * (chipW + chipG), M * 0.9 + eb * 2.1, chipW, chipH, Math.max(24, titleSize * 0.3)));
+    y = Math.max(y, M * 0.9 + eb * 2.1 + chipH) + titleSize * 0.3;
+    ctx.fillStyle = C.head; ctx.fillRect(M, y, W - 2 * M, Math.max(3, W * 0.0012)); y += titleSize * 0.42;
+    const headH = y;
+    // footer
+    const footH = W * 0.055, avail = H - headH - footH - M * 0.6;
+    let lo = 24, hi = land ? W * 0.016 : W * 0.022, L = layout(lo);
+    if (L.total > avail) { gapK = 0.55; L = layout(lo); }
+    if (L.total > avail) warn.push('There is more content than fits at a readable size (24 pt). Hide a card or shorten text in the editor.');
+    else { for (let it = 0; it < 18; it++) { const mid = (lo + hi) / 2, t = layout(mid); if (t.total <= avail) { lo = mid; L = t; } else hi = mid; } }
+    const base = lo;
+    rows.forEach((r, ri) => {
+      let x = M;
+      const rh = L.hs[ri];
+      r.forEach(({ c, sp }) => { const w = sp * L.colW + (sp - 1) * L.G; sheetCard(ctx, T, c, x, y, w, base, true, { minH: rh }); rects.push({ id: c.id, x, y, w, h: rh }); x += w + L.G; });
+      y += rh + L.G;
+    });
+    // footer
+    const fy = H - footH - M * 0.35;
+    ctx.fillStyle = T.line; ctx.fillRect(M, fy, W - 2 * M, Math.max(2, W * 0.0007));
+    const qs = meta.doi ? footH * 0.86 : 0;
+    if (meta.doi) qr(ctx, 'https://doi.org/' + meta.doi, W - M - qs, fy + footH * 0.1, qs, '#111111', '#FFFFFF');
+    const cite = [meta.authors && meta.authors.length ? (meta.authors.length > 2 ? meta.authors[0] + ' et al.' : meta.authors.join(' & ')) : '', meta.year ? `(${meta.year})` : '', meta.journal].filter(Boolean).join(' ');
+    const fl = fit(ctx, `${cite}${meta.doi ? ' · doi.org/' + meta.doi : ''}`, T.body, { w: W - 2 * M - qs - W * 0.02, h: footH * 0.4 }, { max: Math.max(24, base * 0.8), min: 20, lh: 1.25, maxLines: 2 });
+    drawText(ctx, fl, T.body, M, fy + footH * 0.22, { lh: 1.25, color: T.muted });
+    const refs = (sh.refs || []).slice(0, 3).join('   ');
+    if (refs) { const rf = fit(ctx, 'Key references: ' + refs, T.body, { w: W - 2 * M - qs - W * 0.02, h: footH * 0.4 }, { max: Math.max(20, base * 0.66), min: 18, lh: 1.25, maxLines: 2 }); drawText(ctx, rf, T.body, M, fy + footH * 0.22 + fl.lines.length * fl.size * 1.25 + footH * 0.06, { lh: 1.25, color: T.muted }); }
+    const words = cards.reduce((a, c) => a + c.blocks.reduce((b2, bl) => b2 + String(bl.text || (bl.items || []).join(' ') || '').split(/\s+/).length, 0), 0);
+    return { rects, warn, bodyPt: Math.round(base), titlePt: Math.round(tr.size), statementPt: 0, words };
+  }
+  // carousel slide in the study-sheet style
+  function renderSheetSlide(cv, s, i, n, T, ctxData) {
+    const W = 1080, H = 1350, P = 84, ctx = cv.getContext('2d'), C = sheetColors(T), warn = [], base = 34;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+    const meta = ctxData.meta || {}, kws = ctxData.keywords || [], brand = ctxData.brand || {};
+    const B = t => (typeof P2P !== 'undefined' && P2P.boldKey) ? P2P.boldKey(t, kws) : t;
+    // top line and footer
+    eyebrowText(ctx, T, brand.series || (s.type === 'hook' ? [meta.journal, meta.year].filter(Boolean).join(' · ') || 'New research' : 'Paper summary'), P, P + 18, 22, C.head);
+    ctx.font = fontStr(T.body, 22, 600); ctx.fillStyle = T.muted; ctx.textAlign = 'right'; ctx.fillText(`${i + 1} / ${n}`, W - P, P + 18); ctx.textAlign = 'left';
+    ctx.fillStyle = C.head; ctx.fillRect(P, P + 42, W - 2 * P, 3);
+    const footY = H - 70;
+    ctx.fillStyle = T.line; ctx.fillRect(P, footY - 44, W - 2 * P, 2);
+    ctx.font = fontStr(T.body, 22); ctx.fillStyle = T.muted; ctx.fillText(ctxData.footer || '', P, footY);
+    if (i < n - 1) { ctx.font = fontStr(T.body, 24, 700); ctx.fillStyle = C.head; ctx.textAlign = 'right'; ctx.fillText('Swipe  →', W - P, footY); ctx.textAlign = 'left'; }
+    const top = P + 90, bottom = H - 140, cw = W - 2 * P;
+    const heading = (num, text, y) => { const r = fit(ctx, (num ? num + ' · ' : '') + (text || ''), T.display, { w: cw, h: 200 }, { max: 66, min: 44, lh: 1.1, maxLines: 3 }); drawText(ctx, r, T.display, P, y, { lh: 1.1, color: C.head }); return r.lines.length * r.size * 1.1; };
+    // the card grows to fill the slide (up to 50 px text) and shrinks no lower than 30 px
+    const placeCard = (c, y, room = bottom - y, maxB = 50) => {
+      let lo = 30, hi = maxB;
+      if (sheetCard(ctx, T, c, P, y, cw, hi, false) <= room) lo = hi;
+      else if (sheetCard(ctx, T, c, P, y, cw, lo, false) > room) warn.push('This slide has a lot of text. Shorten it.');
+      else for (let k = 0; k < 12; k++) { const mid = (lo + hi) / 2; if (sheetCard(ctx, T, c, P, y, cw, mid, false) <= room) lo = mid; else hi = mid; }
+      return sheetCard(ctx, T, c, P, y, cw, lo, true);
+    };
+    const label = s.label || '';
+    if (s.type === 'hook') {
+      let y = top + 40;
+      const hr = fit(ctx, s.heading, T.display, { w: cw, h: 520 }, { max: 112, min: 60, lh: 1.06 });
+      if (!hr.ok) warn.push('Headline is too long to fit. Shorten it.');
+      y += drawText(ctx, hr, T.display, P, y, { lh: 1.06, color: C.head, hl: T.accent }) + 34;
+      const tr = fit(ctx, meta.title || '', T.body, { w: cw, h: 120 }, { max: 32, min: 24, lh: 1.3, maxLines: 3 });
+      y += drawText(ctx, tr, T.body, P, y, { lh: 1.3, color: T.muted }) + 40;
+      const stats = (ctxData.stats || []).slice(0, 3);
+      if (stats.length) { const g = 18, w = (cw - g * (stats.length - 1)) / stats.length; stats.forEach((st, k) => sheetStat(ctx, T, st, P + k * (w + g), y, w, 190, 40)); y += 190 + 36; }
+      let tx = P;
+      if (brand.avatar) { avatar(ctx, brand.avatar, P, bottom - 74, 64, C.head); tx = P + 80; }
+      if (brand.handle) { ctx.font = fontStr(T.body, 28, 700); ctx.fillStyle = T.ink; ctx.fillText(brand.handle, tx, bottom - 32); }
+      else if (s.body) { ctx.font = fontStr(T.body, 28); ctx.fillStyle = T.muted; ctx.fillText(s.body, tx, bottom - 32); }
+      return warn;
+    }
+    if (s.type === 'cite') {
+      let y = top + 10; y += heading('', s.heading || 'Read the full paper', y) + 30;
+      const c = { tone: 'dark', title: '', blocks: [{ k: 'p', text: `**${meta.title || ''}**` }, { k: 'p', text: (meta.authors || []).join(', '), small: true }, { k: 'p', text: [meta.journal, meta.year, meta.doi ? 'doi.org/' + meta.doi : ''].filter(Boolean).join(' · '), small: true }] };
+      y += placeCard(c, y) + 30;
+      if (meta.doi && y + 220 < bottom) { qr(ctx, 'https://doi.org/' + meta.doi, P, y, 200, '#111111', '#FFFFFF'); const cr = fit(ctx, s.body || '', T.body, { w: cw - 240, h: 200 }, { max: 36, min: 26, lh: 1.3 }); drawText(ctx, cr, T.body, P + 240, y + 10, { lh: 1.3, color: T.ink, bc: C.head, hl: T.accent }); }
+      else if (s.body) { const cr = fit(ctx, s.body, T.body, { w: cw, h: bottom - y }, { max: 36, min: 26, lh: 1.3 }); drawText(ctx, cr, T.body, P, y, { lh: 1.3, color: T.ink }); }
+      return warn;
+    }
+    let y = top; ctxData = { ...ctxData, used: null };
+    const num = i;
+    y += heading(num, s.heading || label, y) + 30;
+    const tone = /limit|keep in mind|caution|risk/i.test(label + ' ' + (s.heading || '')) ? 'warn' : /why|matter|mean|take/i.test(label + ' ' + (s.heading || '')) ? 'dark' : 'light';
+    if (s.type === 'stat') {
+      const c = { tone: 'light', blocks: [s.big ? { k: 'big', big: s.big, label: s.bigLabel || '' } : null, s.ctx ? { k: 'p', text: String(s.ctx).toUpperCase(), small: true } : null, s.body ? { k: 'p', text: B(s.body) } : null].filter(Boolean) };
+      const ch = typeof P2P !== 'undefined' && P2P.chartFor && s.visual !== 'none' ? P2P.chartFor(s.body || '', s.big || '', s.bigLabel || '') : null;
+      y += placeCard(c, y, (bottom - y) - (ch ? 470 : 0), 46) + 30;
+      if (ch && bottom - y > 300) talkChart(ctx, T, ch, P, y, cw, Math.min(500, bottom - y), C.head);
+    } else if (s.type === 'list') {
+      const bl = (s.bullets || []).filter(Boolean);
+      const flowy = /method|what (we|they) did|how/i.test(label + ' ' + (s.heading || '')) && bl.length >= 2 && bl.length <= 5;
+      ctxData.used = y + placeCard({ tone: flowy ? 'outline' : tone, blocks: flowy ? [{ k: 'flow', vertical: true, steps: bl.map((t, k) => ({ title: '', text: B(t), tone: k === bl.length - 1 ? 'accent' : '' })) }] : [{ k: 'ul', items: bl.map(B) }] }, y, bottom - y - 300, 54);
+    } else if (s.type === 'cheat') {
+      const it = (s.items || []).slice(0, 6);
+      const g = 18, w2 = (cw - g) / 2;
+      let yy = y, colH = [y, y];
+      it.forEach((x, k) => { const col = colH[0] <= colH[1] ? 0 : 1; const c = { tone: k === 0 ? 'dark' : 'light', title: x.title, blocks: [x.big ? { k: 'p', text: `**${x.big}**` } : null, { k: 'p', text: B(x.text || '') }].filter(Boolean) }; const hh = sheetCard(ctx, T, c, 0, 0, w2, 32, false); if (colH[col] + hh > bottom) return; sheetCard(ctx, T, c, P + col * (w2 + g), colH[col], w2, 32, true); colH[col] += hh + g; });
+      void yy;
+    } else if (s.type === 'figure' && ctxData.figure) {
+      placeCard({ tone: 'light', blocks: [s.body ? { k: 'p', text: B(s.body) } : null, { k: 'fig', img: ctxData.figure }].filter(Boolean) }, y);
+    } else {
+      const st = (s.steps || []).map(x => String(x).trim()).filter(Boolean);
+      const quote = s.layout === 'quote';
+      ctxData.used = y + placeCard({ tone: quote ? 'dark' : tone, blocks: [{ k: 'p', text: quote ? `**“${String(s.body || '').replace(/\*/g, '')}”**` : B(s.body || '') }, st.length >= 2 ? { k: 'flow', steps: st.slice(0, 4).map((t, k) => ({ title: t, text: '', tone: k === st.length - 1 ? 'accent' : '' })), vertical: true } : null].filter(Boolean) }, y, bottom - y - 300, 58);
+    }
+    // a "From the paper" note fills spare room and shows where the slide came from
+    const src = (s.srcs || [])[s.type === 'list' ? 0 : (s.optIndex || 0) % Math.max(1, (s.srcs || []).length)];
+    if (src && src.text && !['cheat', 'figure'].includes(s.type) && ctxData.used != null) {
+      const yy = ctxData.used + 30, room = bottom - yy;
+      const note = { tone: 'outline', title: '', blocks: [{ k: 'p', text: `**From the paper${src.where ? ' · ' + src.where : ''}**`, small: true }, { k: 'p', text: '“' + (P2P.shorten ? P2P.shorten(src.text, 34) : src.text) + '”', small: true }] };
+      if (room > 200 && sheetCard(ctx, T, note, P, yy, cw, 30, false) <= room) sheetCard(ctx, T, note, P, yy, cw, 30, true);
+    }
+    const words = P2P.wc(s.body || '') + (s.bullets ? s.bullets.reduce((a, b) => a + P2P.wc(b), 0) : 0);
+    if (words > 45) warn.push(`${words} words on this slide. Aim for 40 or fewer.`);
+    return warn;
+  }
+
   // ---- editable PowerPoint from recorded talk slides ----
   // items: [{ rec, notes, crop(x, y, w, h) -> PNG data URL }]
   function buildTalkPptx(Pptx, items, T, info = {}) {
@@ -1458,9 +1762,9 @@ const R = (() => {
           const runs = []; let cur = null;
           tokens(r.text).forEach((tk, k, a) => {
             if (tk.br) { if (cur) cur.options.breakLine = true; cur = null; return; }
-            const color = hex(tk.hl && r.hl ? r.hl : r.color), sp = k < a.length - 1 && !a[k + 1].br ? ' ' : '';
-            if (cur && cur.options.color === color && !cur.options.breakLine) cur.text += tk.t + sp;
-            else { cur = { text: tk.t + sp, options: { color } }; runs.push(cur); }
+            const color = hex(tk.hl && r.hl ? r.hl : tk.b && r.bc ? r.bc : r.color), sp = k < a.length - 1 && !a[k + 1].br ? ' ' : '', bold = !!tk.b || undefined;
+            if (cur && cur.options.color === color && cur.options.bold === bold && !cur.options.breakLine) cur.text += tk.t + sp;
+            else { cur = { text: tk.t + sp, options: { color, bold } }; runs.push(cur); }
           });
           sl.addText(runs, { x: IN(r.x), y: IN(r.y), w: IN(r.w + 6), h: IN(r.h * 1.08 + 4), margin: 0, valign: 'top', align: r.align, fontFace: face[r.font], fontSize: Math.max(8, Math.round(r.size * 0.5 * 0.97 * 2) / 2), bold: r.bold || (r.font === 'display' && T.display.weight >= 600), lineSpacingMultiple: Math.max(0.8, Math.round(r.lh / 1.2 * 100) / 100), fit: 'shrink', wrap: true });
         }
@@ -1471,6 +1775,7 @@ const R = (() => {
   }
 
   function renderPoster(ctx, P, meta, T, size, figs, opts = {}) {
+    if (P.layout === 'sheet' && P.sheet) return renderSheetPoster(ctx, P, meta, T, size, figs);
     if (P.layout === 'story' && P.story) return renderStoryPoster(ctx, P, meta, T, size, figs);
     if (P.layout === 'billboard' && P.bb) return renderBillboard(ctx, P, meta, T, size, figs);
     const L = posterLayout(ctx, P, meta, T, size, figs);
@@ -1573,5 +1878,5 @@ const R = (() => {
     const onAccent = contrast(a, '#FFFFFF') >= 4.5 ? '#FFFFFF' : '#111111';
     return { ...T, accent: a, soft: hexMix(a, T.bg, 0.86), onAccent, adjusted: a.toLowerCase() !== hex.toLowerCase() };
   }
-  return { withAccent, renderTalkSlide, buildTalkPptx, tokens, THEMES, ICON_NAMES, fontSpecs, themeContrast, renderSlide, visualFor, animEnd, renderStory, renderGA, bbWords, visualsFor, EFFECT, renderPoster, POSTER_SIZES, contrast };
+  return { sheetCard, withAccent, renderTalkSlide, buildTalkPptx, tokens, THEMES, ICON_NAMES, fontSpecs, themeContrast, renderSlide, visualFor, animEnd, renderStory, renderGA, bbWords, visualsFor, EFFECT, renderPoster, POSTER_SIZES, contrast };
 })();

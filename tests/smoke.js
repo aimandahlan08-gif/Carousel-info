@@ -64,6 +64,13 @@ const go = async t => { if (t === 'extracted') { $('#fcBadge').click(); await sl
   console.log('after WhatsApp tap -> modal hidden:', $('#shareModal').hidden, '| toast:', $('#toast').textContent);
   await go('poster'); await sleep(150);
   console.log('STORY layout:', $('#pLayout').value, '| size:', $('#pSize').value, '| blocks:', [...w.document.querySelectorAll('.blk')].map(b => b.dataset.b).join(','), '| meta:', $('#pMeta').textContent);
+  // study sheet editor (the default layout)
+  const shTa = $('#insp textarea[data-b2]'); shTa.value = shTa.value + ' **Edited**'; shTa.dispatchEvent(new w.Event('input'));
+  const shShow = $('#insp [data-f="show"]'); shShow.checked = false; shShow.dispatchEvent(new w.Event('change')); await sleep(80);
+  const shTone = $('#insp select[data-f="tone"]'); shTone.value = 'dark'; shTone.dispatchEvent(new w.Event('change'));
+  const shMv = $('#insp [data-mv="1"]'); shMv.click(); await sleep(80);
+  console.log('sheet editor ok, meta:', $('#pMeta').textContent);
+  $('#pLayout').value = 'story'; $('#pLayout').dispatchEvent(new w.Event('change')); await sleep(150);
   const tk = $('textarea[data-s="take"]'); tk.value = 'Cycling to campus goes with *lower loneliness*.'; tk.dispatchEvent(new w.Event('input'));
   const cs = $('select[data-col="why"]'); cs.value = '1'; cs.dispatchEvent(new w.Event('change'));
   const stp = $('textarea[data-s="steps"]'); stp.value = 'Survey | 486 students\nAnalysis | Regression'; stp.dispatchEvent(new w.Event('input'));
